@@ -1,13 +1,8 @@
 import numpy as np
 import os
-import MovieQA_benchmark as MovieQA
 import re
 import h5py
 import math
-
-import gensim
-from gensim.models import KeyedVectors
-
 
 
 def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}):
