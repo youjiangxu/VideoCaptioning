@@ -3,7 +3,7 @@ import os
 import h5py
 import math
 
-from utils import CaptionDataUtil
+from utils import DataUtil
 from model import CaptionModel 
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -28,8 +28,8 @@ def exe_train(sess, data, batch_size, v2i, hf, feature_shape,
 		# if batch_idx < 100:
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 
-		data_v = CaptionDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-		data_c, data_y = CaptionDataUtil.getNewBatchTrainCaption(batch_caption, v2i, capl=capl)
+		data_v = DataUtil.getBatchBidirectVideoFeature(batch_caption,hf,feature_shape)
+		data_c, data_y = DataUtil.getNewBatchTrainCaption(batch_caption, v2i, capl=capl)
 
 		_, l = sess.run([train,loss],feed_dict={input_video:data_v, input_captions:data_c,  y:data_y})
 		total_loss += l
@@ -47,11 +47,11 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
-		data_v = CaptionDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-		data_c, data_y = CaptionDataUtil.getBatchTestCaption(batch_caption, v2i, capl=capl)
+		data_v = DataUtil.getBatchBidirectVideoFeature(batch_caption,hf,feature_shape)
+		data_c, data_y = DataUtil.getBatchTestCaption(batch_caption, v2i, capl=capl)
 		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
-		generated_captions = CaptionDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
+		generated_captions = DataUtil.convertCaptionI2V(batch_caption, gw, i2v)
 
 		for idx, sen in enumerate(generated_captions):
 			print('%s : %s' %(batch_caption[idx].keys()[0],sen))
@@ -80,7 +80,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	'''
 
 	# Create vocabulary
-	v2i, train_data, val_data, test_data = CaptionDataUtil.create_vocabulary_word2vec(file, capl=capl, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	v2i, train_data, val_data, test_data = DataUtil.create_vocabulary_word2vec(file, capl=capl, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
 
 	i2v = {i:v for v,i in v2i.items()}
 
@@ -102,7 +102,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.3
+	config.gpu_options.per_process_gpu_memory_fraction = 0.2
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -164,7 +164,7 @@ if __name__ == '__main__':
 	# width = 7
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'GoogleNet'
+	f_type = 'random_bidirect_GoogleNet'
 	# feature_path = '/home/xyj/usr/local/data/in5b-'+str(timesteps_v)+'fpv.h5'
 	feature_path = '/home/xyj/usr/local/data/YouTube/feature/pool5_7x7_s1-'+str(timesteps_v)+'f.h5'
 
