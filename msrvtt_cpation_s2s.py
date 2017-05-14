@@ -158,18 +158,31 @@ if __name__ == '__main__':
 
 	lr = 0.0002
 
-
-	
-	video_feature_dims=1024
+	'''
+	---------------------------------
+	'''
+	video_feature_dims=2048
 	timesteps_v=40 # sequences length for video
-	# hight = 7
-	# width = 7
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'GoogleNet'
-	# feature_path = '/home/xyj/usr/local/data/in5b-'+str(timesteps_v)+'fpv.h5'
-	#feature_path = '/home/xyj/usr/local/data/YouTube/feature/pool5_7x7_s1-'+str(timesteps_v)+'f.h5'
-	feature_path = '/mnt/data3/yzw/MSRVTT2017/features/googlenet_pl5_f'+str(timesteps_v)+'.h5'
+	f_type = 'resnet'
+	feature_path = '/mnt/data3/yzw/MSRVTT2017/features/resnet152_pool5_f'+str(timesteps_v)+'.h5'
+
+
+	'''
+	---------------------------------
+	'''
+	
+	# video_feature_dims=1024
+	# timesteps_v=40 # sequences length for video
+	# # hight = 7
+	# # width = 7
+	# feature_shape = (timesteps_v,video_feature_dims)
+
+	# f_type = 'GoogleNet'
+	# # feature_path = '/home/xyj/usr/local/data/in5b-'+str(timesteps_v)+'fpv.h5'
+	# #feature_path = '/home/xyj/usr/local/data/YouTube/feature/pool5_7x7_s1-'+str(timesteps_v)+'f.h5'
+	# feature_path = '/mnt/data3/yzw/MSRVTT2017/features/googlenet_pl5_f'+str(timesteps_v)+'.h5'
 
 
 	'''
