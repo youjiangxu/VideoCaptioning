@@ -5,9 +5,10 @@ import h5py
 import math
 import json
 from collections import Counter
-def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}):
+def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}, limit_sen=5):
 	'''
 	v2i = {'': 0, 'UNK':1}  # vocabulary to index
+	limit_sen: the number sentence for training per video
 	'''
 	json_file = file+'/videodatainfo_2017.json'
 	train_info = json.load(open(json_file,'r'))
@@ -21,6 +22,8 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 	val_data = []
 	test_data = []
 
+	
+
 	print('preprocess sentence...')
 	for idx, sentence in enumerate(sentences):
 		video_id = sentence['video_id']
@@ -29,10 +32,12 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 		if(video_id in train_video):
 			if len(caption)<capl and len(caption)>=5:
 				train_data.append({video_id:caption})
+				
 			
 		elif(video_id in val_video):
 			if len(caption)<capl and len(caption)>=5:
 				val_data.append({video_id:caption})
+				
 			
 		# elif(video_id in test_video):
 		# 	# test_data.append({video_id:caption})
@@ -64,10 +69,37 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 		if w not in v2i.keys():
 			v2i[w] = len(v2i)
 
+	# new training set and validation set
+	
+
 	print('size of vocabulary: %d '%(len(v2i)))
 	print('size of train, val, test: %d, %d, %d' %(len(train_data),len(val_data),len(test_data)))
 
-	return v2i, train_data, val_data, test_data
+
+	train_count={}
+	val_count={}
+	new_train_data = []
+	new_val_data = []
+	for caption_info in train_data:
+		for k,v in caption_info.items():
+			if k in train_count.keys() and train_count[k]<=limit_sen:
+				new_train_data.append(caption_info)
+				train_count[k]=train_count[k]+1
+			elif k not in train_count.keys():
+				new_train_data.append(caption_info)
+				train_count[k]=1
+
+	for caption_info in val_data:
+		for k,v in caption_info.items():
+			if k in val_count.keys() and val_count[k]<=limit_sen:
+				new_val_data.append(caption_info)
+				val_count[k]=val_count[k]+1
+			elif k not in val_count.keys():
+				new_val_data.append(caption_info)
+				val_count[k]=1
+
+	print('thresholding size of train, val, test: %d, %d, %d' %(len(new_train_data),len(new_val_data),len(test_data)))
+	return v2i, new_train_data, new_val_data, test_data
 
 
 

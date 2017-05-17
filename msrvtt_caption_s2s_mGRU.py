@@ -93,7 +93,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl,len(v2i)))
 
-	captionModel = CaptionModel.CaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim)
+	captionModel = CaptionModel.mGRUCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim)
 	predict_score, predict_words = captionModel.build_model()
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
@@ -165,10 +165,10 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'resnet'
-	feature_path = '/mnt/data3/yzw/MSRVTT2017/features/resnet152_pool5_f'+str(timesteps_v)+'.h5'
-
-
+	f_type = 'mGRU_resnet'
+	# feature_path = '/mnt/data3/yzw/MSRVTT2017/features/resnet152_pool5_f'+str(timesteps_v)+'.h5'
+	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f40.h5'
+	feature_path = '/data/xyj/resnet152_pool5_f40.h5'
 	'''
 	---------------------------------
 	'''

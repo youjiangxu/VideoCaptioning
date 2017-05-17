@@ -136,7 +136,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 			
 
 			#save model
-			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s'+'_'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])
+			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s'+'_'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
 			if not os.path.exists(export_path+'/model'):
 				os.makedirs(export_path+'/model')
 				print('mkdir %s' %export_path+'/model')
@@ -160,12 +160,20 @@ if __name__ == '__main__':
 
 
 	
-	video_feature_dims=1024
+	video_feature_dims=2048
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'attention_GoogleNet'
-	feature_path = '/mnt/data3/yzw/MSRVTT2017/features/googlenet_pl5_f'+str(timesteps_v)+'.h5'
+	f_type = 'attention_resnet152'
+	feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
+
+
+	# video_feature_dims=1024
+	# timesteps_v=40 # sequences length for video
+	# feature_shape = (timesteps_v,video_feature_dims)
+
+	# f_type = 'attention_GoogleNet'
+	# feature_path = '/mnt/data3/yzw/MSRVTT2017/features/googlenet_pl5_f'+str(timesteps_v)+'.h5'
 
 
 	'''
@@ -173,7 +181,7 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
-	pretrained_model = None
+	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_attention_resnet152/lr0.0002_f40/model/E5_L0.843568371029.ckpt'
 	
 	main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 		feature_shape=feature_shape,lr=lr,
