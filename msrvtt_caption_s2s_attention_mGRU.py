@@ -6,7 +6,7 @@ import math
 from utils import MsrDataUtil
 from model import CaptionModel 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -24,8 +24,8 @@ def exe_train(sess, data, batch_size, v2i, hf, feature_shape,
 	num_batch = int(round(total_data*1.0/batch_size))
 
 	total_loss = 0.0
-	# for batch_idx in xrange(num_batch):
-	for batch_idx in xrange(500):
+	for batch_idx in xrange(num_batch):
+	# for batch_idx in xrange(500):
 
 		# if batch_idx < 100:
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
@@ -97,15 +97,15 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	predict_score, predict_words = attentionCaptionModel.build_model()
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-	# optimizer = tf.train.AdamOptimizer(learning_rate=lr,beta1=0.9,beta2=0.999,epsilon=1e-08,use_locking=False,name='Adam')
-	optimizer = tf.train.RMSPropOptimizer(lr,decay=0.9, momentum=0.0, epsilon=1e-8)
+	optimizer = tf.train.AdamOptimizer(learning_rate=lr,beta1=0.9,beta2=0.999,epsilon=1e-08,use_locking=False,name='Adam')
+	# optimizer = tf.train.RMSPropOptimizer(lr,decay=0.9, momentum=0.0, epsilon=1e-8)
 	train = optimizer.minimize(loss)
 
 	'''
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.3
+	config.gpu_options.per_process_gpu_memory_fraction = 0.5
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -157,7 +157,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 if __name__ == '__main__':
 
 
-	lr = 0.0002
+	lr = 0.0001
 
 
 	
@@ -167,7 +167,7 @@ if __name__ == '__main__':
 
 	f_type = 'mgru_attention_resnet152'
 	feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
-
+	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 
 	# video_feature_dims=1024
 	# timesteps_v=40 # sequences length for video
@@ -186,7 +186,7 @@ if __name__ == '__main__':
 	
 	main(hf,f_type,capl=20, d_w2v=512, output_dim=512,
 		feature_shape=feature_shape,lr=lr,
-		batch_size=64,total_epoch=100,
+		batch_size=128,total_epoch=100,
 		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 

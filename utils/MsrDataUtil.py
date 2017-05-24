@@ -74,32 +74,32 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 
 	print('size of vocabulary: %d '%(len(v2i)))
 	print('size of train, val, test: %d, %d, %d' %(len(train_data),len(val_data),len(test_data)))
+	return v2i, train_data, val_data, test_data
 
+	# train_count={}
+	# val_count={}
+	# new_train_data = []
+	# new_val_data = []
+	# for caption_info in train_data:
+	# 	for k,v in caption_info.items():
+	# 		if k in train_count.keys() and train_count[k]<=limit_sen:
+	# 			new_train_data.append(caption_info)
+	# 			train_count[k]=train_count[k]+1
+	# 		elif k not in train_count.keys():
+	# 			new_train_data.append(caption_info)
+	# 			train_count[k]=1
 
-	train_count={}
-	val_count={}
-	new_train_data = []
-	new_val_data = []
-	for caption_info in train_data:
-		for k,v in caption_info.items():
-			if k in train_count.keys() and train_count[k]<=limit_sen:
-				new_train_data.append(caption_info)
-				train_count[k]=train_count[k]+1
-			elif k not in train_count.keys():
-				new_train_data.append(caption_info)
-				train_count[k]=1
+	# for caption_info in val_data:
+	# 	for k,v in caption_info.items():
+	# 		if k in val_count.keys() and val_count[k]<=limit_sen:
+	# 			new_val_data.append(caption_info)
+	# 			val_count[k]=val_count[k]+1
+	# 		elif k not in val_count.keys():
+	# 			new_val_data.append(caption_info)
+	# 			val_count[k]=1
 
-	for caption_info in val_data:
-		for k,v in caption_info.items():
-			if k in val_count.keys() and val_count[k]<=limit_sen:
-				new_val_data.append(caption_info)
-				val_count[k]=val_count[k]+1
-			elif k not in val_count.keys():
-				new_val_data.append(caption_info)
-				val_count[k]=1
-
-	print('thresholding size of train, val, test: %d, %d, %d' %(len(new_train_data),len(new_val_data),len(test_data)))
-	return v2i, new_train_data, new_val_data, test_data
+	# print('thresholding size of train, val, test: %d, %d, %d' %(len(new_train_data),len(new_val_data),len(test_data)))
+	# return v2i, new_train_data, new_val_data, test_data
 
 
 
@@ -178,12 +178,9 @@ def getBatchTrainCaption(batch_caption, v2i, capl=16):
 				else:
 					labels[idx][k][v2i['UNK']] = 1
 					input_captions[idx][k+1] = v2i['UNK']
-			# if len(sen)+1<capl:
-			# 	input_captions[idx][len(sen)+1] = v2i['EOS']
 			labels[idx][len(sen)][v2i['EOS']] = 1
-	# print(batch_caption)
-	# print(input_captions)
-	# print(np.sum(labels,-1))
+			if len(sen)+1<capl:
+				input_captions[idx][len(sen)+1] = 1
 	return input_captions, labels
 
 def getNewBatchTrainCaption(batch_caption, v2i, capl=16):
@@ -235,6 +232,17 @@ def convertCaptionI2V(batch_caption, generated_captions,i2v):
 		caption = ''
 		for word in sen:
 			if i2v[word]=='EOS':
+				break
+			caption+=i2v[word]+' '
+		captions.append(caption)
+	return captions
+
+def convertCaptionWithZeroDonetoken(batch_caption, generated_captions,i2v, donetoken=0):
+	captions = []
+	for idx, sen in enumerate(generated_captions):
+		caption = ''
+		for word in sen:
+			if i2v[word]=='EOS' or word==donetoken:
 				break
 			caption+=i2v[word]+' '
 		captions.append(caption)
