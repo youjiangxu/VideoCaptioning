@@ -18,7 +18,7 @@ class BeamSearchAttentionCaptionModel(object):
 	'''
 		caption model for ablation studying
 	'''
-	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, done_token=3, beamsearch_batchsize = 10, beam_size=5, attention_dim = 100, dropout=0.5,
+	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, done_token=3, max_len = 20, beamsearch_batchsize = 10, beam_size=5, attention_dim = 100, dropout=0.5,
 		inner_activation='hard_sigmoid',activation='tanh',
 		return_sequences=True):
 		self.input_feature = input_feature
@@ -31,10 +31,10 @@ class BeamSearchAttentionCaptionModel(object):
 
 		self.beam_size = beam_size
 
-		assert(beamsearch_batchsize==10)
+		# assert(beamsearch_batchsize==10)
 		self.batch_size = beamsearch_batchsize
 		self.done_token = done_token
-		self.max_len = 12
+		self.max_len = max_len
 
 		self.inner_activation = inner_activation
 		self.activation = activation
@@ -480,6 +480,108 @@ class BeamSearchAttentionCaptionModel(object):
 		h = (1-z)*hh + z*h_tm1
 		return h
 	
+	# def take_step_zero(self, x_0, h_0):
+
+	# 	x_0 = tf.gather(self.T_w2v,x_0)*tf.gather(self.T_mask,x_0)
+	# 	x_0 = tf.reshape(x_0,[self.batch_size*self.beam_size,self.d_w2v])
+	# 	h = self.step(x_0,h_0)
+	# 	drop_h = h*self.dropout
+	# 	predict_score_t = tf.matmul(drop_h,self.W_c) + tf.reshape(self.b_c,(1,self.voc_size))
+	# 	# logprobs = tf.log(tf.nn.softmax(predict_score_t))
+	# 	logprobs = tf.nn.log_softmax(predict_score_t)
+
+	# 	print('logrobs.get_shape().as_list():',logprobs.get_shape().as_list())
+
+	# 	logprobs_batched = tf.reshape(logprobs, [-1, self.beam_size, self.voc_size])
+
+	# 	# Note: masking out entries to -inf plays poorly with top_k, so just subtract out
+	# 	# a large number.
+	# 	nondone_mask = tf.reshape(
+	# 	    tf.cast(tf.equal(tf.range(self.voc_size), self.done_token), tf.float32) * -1e18,
+	# 	    [1, 1, self.voc_size]
+	# 	)
+	# 	self.past_logprobs, indices = tf.nn.top_k(
+	# 	        (logprobs_batched + nondone_mask)[:,0,:],
+	# 	        self.beam_size
+	# 	    )
+	# 	symbols = indices % self.voc_size
+	# 	parent_refs = indices // self.voc_size
+	# 	print('symbols.shape',symbols.get_shape().as_list())
+	# 	self.past_symbols = tf.concat([tf.expand_dims(symbols, 2), tf.zeros((self.batch_size, self.beam_size, self.max_len-1), dtype=tf.int32)],-1)
+	# 	return symbols, h
+	# def take_step(self, i, prev, past_symbols,  finished_beams, logprobs_finished_beams ):
+	# 	# logprobs = tf.log(tf.nn.softmax(prev))
+	# 	logprobs = tf.nn.log_softmax(prev)
+	# 	print('logrobs.get_shape().as_list():',logprobs.get_shape().as_list())
+
+	# 	logprobs_batched = tf.reshape(logprobs, [-1, self.beam_size, self.voc_size])
+
+	# 	# Note: masking out entries to -inf plays poorly with top_k, so just subtract out
+	# 	# a large number.
+	# 	nondone_mask = tf.reshape(
+	# 	    tf.cast(tf.equal(tf.range(self.voc_size), self.done_token), tf.float32) * -1e18,
+	# 	    [1, 1, self.voc_size]
+	# 	)
+	# 	# if self.past_logprobs is not None:
+	# 	logprobs_batched = logprobs_batched + tf.expand_dims(self.past_logprobs, 2)
+
+	# 	self.past_logprobs, indices = tf.nn.top_k(
+	# 	    tf.reshape(logprobs_batched + nondone_mask, [-1, self.beam_size * self.voc_size]),
+	# 	    self.beam_size
+	# 	)       
+		
+	# 	# For continuing to the next symbols
+	# 	symbols = indices % self.voc_size
+	# 	parent_refs = indices // self.voc_size
+
+	# 	parent_refs_offsets = tf.reshape(
+	# 	    (tf.range(self.batch_size * self.beam_size) // self.beam_size) * self.beam_size,
+	# 	    [self.batch_size, self.beam_size]
+	# 	)
+	# 	# print('past_symbols.get_shape()',self.past_symbols.get_shape().as_list())
+	# 	past_symbols_batch_major = tf.reshape(past_symbols[:,:,0:i], [-1, i])
+
+	# 	beam_past_symbols = tf.gather(past_symbols_batch_major, #batch-major
+	# 	                          parent_refs + parent_refs_offsets)
+	# 	past_symbols = tf.concat([beam_past_symbols, tf.expand_dims(symbols, 2), tf.zeros((self.batch_size, self.beam_size, self.max_len-i-1), dtype=tf.int32)],2)
+	# 	past_symbols = tf.reshape(past_symbols, [self.batch_size,self.beam_size,self.max_len])
+		
+	# 	# For finishing the beam here
+	# 	logprobs_done = logprobs_batched[:,:,self.done_token] # batch_size x beam_size
+	# 	done_parent_refs = tf.cast(tf.argmax(logprobs_done, 1), tf.int32)
+	# 	done_parent_refs_offsets = tf.range(self.batch_size) * self.beam_size
+
+	# 	done_past_symbols = tf.gather(past_symbols_batch_major,
+	# 	                              done_parent_refs + done_parent_refs_offsets
+	# 	                )
+
+	# 	symbols_done = tf.concat([done_past_symbols,
+	# 	                             tf.ones_like(done_past_symbols[:,0:1]) * self.done_token,
+	# 	                             tf.tile(tf.zeros_like(done_past_symbols[:,0:1]),
+	# 	                                     [1, self.max_len - i-1])
+	# 	                            ],-1)
+
+	# 	logprobs_done_max = tf.reduce_max(logprobs_done, 1)
+	# 	print('symbols.shape:',logprobs_done_max.get_shape().as_list())
+	# 	print('logprobs_done_max.shape:',logprobs_done_max.get_shape().as_list())
+	# 	print('self.past_logprobs.shape:',self.past_logprobs.get_shape().as_list())
+	# 	# (logprobs_done_max > logprobs_finished_beams) == 
+	# 	cond1 = tf.greater(logprobs_done_max,logprobs_finished_beams)
+	# 	# cond2 = tf.equal(tf.reshape(tf.cast(tf.argmax(tf.reshape(logprobs_batched, [-1, self.beam_size * self.voc_size]),-1),tf.int32),[-1]) % self.voc_size,self.done_token)
+
+	# 	# cond3 = tf.greater(tf.reshape(tf.reduce_max(tf.reshape(logprobs_batched, [-1, self.beam_size * self.voc_size]),-1),[-1]),logprobs_finished_beams)
+	# 	# tf.logical_and(cond3,cond2)
+	# 	finished_beams = tf.where(cond1,
+	# 	                                symbols_done,
+	# 	                                finished_beams)
+	# 	logprobs_finished_beams = tf.where(cond1,
+	# 									logprobs_done_max, 
+	# 									logprobs_finished_beams)
+		
+
+	# 	return symbols, past_symbols, finished_beams, logprobs_finished_beams
+
+	
 	def take_step_zero(self, x_0, h_0):
 
 		x_0 = tf.gather(self.T_w2v,x_0)*tf.gather(self.T_mask,x_0)
@@ -494,16 +596,9 @@ class BeamSearchAttentionCaptionModel(object):
 
 		logprobs_batched = tf.reshape(logprobs, [-1, self.beam_size, self.voc_size])
 
-		# Note: masking out entries to -inf plays poorly with top_k, so just subtract out
-		# a large number.
-		nondone_mask = tf.reshape(
-		    tf.cast(tf.equal(tf.range(self.voc_size), self.done_token), tf.float32) * -1e18,
-		    [1, 1, self.voc_size]
-		)
+		
 		self.past_logprobs, indices = tf.nn.top_k(
-		        (logprobs_batched + nondone_mask)[:,0,:],
-		        self.beam_size
-		    )
+		        logprobs_batched[:,0,:],self.beam_size)
 		symbols = indices % self.voc_size
 		parent_refs = indices // self.voc_size
 		print('symbols.shape',symbols.get_shape().as_list())
@@ -516,17 +611,11 @@ class BeamSearchAttentionCaptionModel(object):
 
 		logprobs_batched = tf.reshape(logprobs, [-1, self.beam_size, self.voc_size])
 
-		# Note: masking out entries to -inf plays poorly with top_k, so just subtract out
-		# a large number.
-		nondone_mask = tf.reshape(
-		    tf.cast(tf.equal(tf.range(self.voc_size), self.done_token), tf.float32) * -1e18,
-		    [1, 1, self.voc_size]
-		)
-		# if self.past_logprobs is not None:
+		
 		logprobs_batched = logprobs_batched + tf.expand_dims(self.past_logprobs, 2)
 
 		self.past_logprobs, indices = tf.nn.top_k(
-		    tf.reshape(logprobs_batched + nondone_mask, [-1, self.beam_size * self.voc_size]),
+		    tf.reshape(logprobs_batched, [-1, self.beam_size * self.voc_size]),
 		    self.beam_size
 		)       
 		
@@ -547,40 +636,36 @@ class BeamSearchAttentionCaptionModel(object):
 		past_symbols = tf.reshape(past_symbols, [self.batch_size,self.beam_size,self.max_len])
 		
 		# For finishing the beam here
-		logprobs_done = logprobs_batched[:,:,self.done_token] # batch_size x beam_size
-		done_parent_refs = tf.cast(tf.argmax(logprobs_done, 1), tf.int32)
+		logprobs_done_max = tf.reduce_max(self.past_logprobs, 1)
+		done_parent_refs = tf.cast(tf.argmax(self.past_logprobs, 1), tf.int32)
 		done_parent_refs_offsets = tf.range(self.batch_size) * self.beam_size
 
-		done_past_symbols = tf.gather(past_symbols_batch_major,
+		done_past_symbols = tf.gather(tf.reshape(past_symbols,[self.batch_size*self.beam_size,self.max_len]),
 		                              done_parent_refs + done_parent_refs_offsets
 		                )
 
-		symbols_done = tf.concat([done_past_symbols,
-		                             tf.ones_like(done_past_symbols[:,0:1]) * self.done_token,
-		                             tf.tile(tf.zeros_like(done_past_symbols[:,0:1]),
-		                                     [1, self.max_len - i-1])
-		                            ],-1)
+		
 
-		logprobs_done_max = tf.reduce_max(logprobs_done, 1)
+		
 		print('symbols.shape:',logprobs_done_max.get_shape().as_list())
 		print('logprobs_done_max.shape:',logprobs_done_max.get_shape().as_list())
 		print('self.past_logprobs.shape:',self.past_logprobs.get_shape().as_list())
 		# (logprobs_done_max > logprobs_finished_beams) == 
 		cond1 = tf.greater(logprobs_done_max,logprobs_finished_beams)
+		cond2 = tf.equal(done_past_symbols[:,-1],self.done_token)
 		# cond2 = tf.equal(tf.reshape(tf.cast(tf.argmax(tf.reshape(logprobs_batched, [-1, self.beam_size * self.voc_size]),-1),tf.int32),[-1]) % self.voc_size,self.done_token)
 
 		# cond3 = tf.greater(tf.reshape(tf.reduce_max(tf.reshape(logprobs_batched, [-1, self.beam_size * self.voc_size]),-1),[-1]),logprobs_finished_beams)
 		# tf.logical_and(cond3,cond2)
-		finished_beams = tf.where(cond1,
-		                                symbols_done,
+		finished_beams = tf.where(tf.logical_and(cond1,cond2),
+		                                done_past_symbols,
 		                                finished_beams)
-		logprobs_finished_beams = tf.where(cond1,
+		logprobs_finished_beams = tf.where(tf.logical_and(cond1,cond2),
 										logprobs_done_max, 
 										logprobs_finished_beams)
 		
 
 		return symbols, past_symbols, finished_beams, logprobs_finished_beams
-
 	def build_model(self):
 		print('building model ... ...')
 		self.init_parameters()

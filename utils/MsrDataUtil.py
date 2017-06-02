@@ -5,7 +5,7 @@ import h5py
 import math
 import json
 from collections import Counter
-def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}, limit_sen=5):
+def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}, word_threshold=2, sen_length=5):
 	'''
 	v2i = {'': 0, 'UNK':1}  # vocabulary to index
 	limit_sen: the number sentence for training per video
@@ -30,12 +30,12 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 		caption = sentence['caption'].strip().split(' ')
 		# print caption
 		if(video_id in train_video):
-			if len(caption)<capl and len(caption)>=5:
+			if len(caption)<capl and len(caption)>=sen_length:
 				train_data.append({video_id:caption})
 				
 			
 		elif(video_id in val_video):
-			if len(caption)<capl and len(caption)>=5:
+			if len(caption)<capl and len(caption)>=sen_length:
 				val_data.append({video_id:caption})
 				
 			
@@ -62,7 +62,7 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 			all_word.extend(v)
 
 	vocab = Counter(all_word)
-	vocab = [k for k in vocab.keys() if vocab[k] >= 2]
+	vocab = [k for k in vocab.keys() if vocab[k] >= word_threshold]
 
 	# create vocabulary index
 	for w in vocab:
@@ -71,37 +71,61 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 
 	# new training set and validation set
 	
+	# if limit_sen is None:
 
 	print('size of vocabulary: %d '%(len(v2i)))
 	print('size of train, val, test: %d, %d, %d' %(len(train_data),len(val_data),len(test_data)))
-	return v2i, train_data, val_data, test_data
+	return v2i, train_data, val_data, test_data	
+	# else:
+	# 	train_count={}
+	# 	val_count={}
+	# 	new_train_data = []
+	# 	new_val_data = []
+	# 	count = 0
+	# 	for caption_info in train_data:
+	# 		for k,v in caption_info.items():
+			
+	# 			if k in train_count.keys() and train_count[k]<=limit_sen:
+	# 				new_train_data.append(caption_info)
+	# 				train_count[k]=train_count[k]+1
+	# 			elif k not in train_count.keys():
+	# 				new_train_data.append(caption_info)
+	# 				train_count[k]=1
 
-	# train_count={}
-	# val_count={}
-	# new_train_data = []
-	# new_val_data = []
-	# for caption_info in train_data:
-	# 	for k,v in caption_info.items():
-	# 		if k in train_count.keys() and train_count[k]<=limit_sen:
-	# 			new_train_data.append(caption_info)
-	# 			train_count[k]=train_count[k]+1
-	# 		elif k not in train_count.keys():
-	# 			new_train_data.append(caption_info)
-	# 			train_count[k]=1
+	# 	for caption_info in val_data:
+	# 		for k,v in caption_info.items():
+	# 			if k in val_count.keys() and val_count[k]<=limit_sen:
+	# 				new_val_data.append(caption_info)
+	# 				val_count[k]=val_count[k]+1
+	# 			elif k not in val_count.keys():
+	# 				new_val_data.append(caption_info)
+	# 				val_count[k]=1
+	# 	print('count',count)
+	# 	print('thresholding size of train, val, test: %d, %d, %d' %(len(new_train_data),len(new_val_data),len(test_data)))
+	# 	return v2i, new_train_data, new_val_data, test_data
 
-	# for caption_info in val_data:
-	# 	for k,v in caption_info.items():
-	# 		if k in val_count.keys() and val_count[k]<=limit_sen:
-	# 			new_val_data.append(caption_info)
-	# 			val_count[k]=val_count[k]+1
-	# 		elif k not in val_count.keys():
-	# 			new_val_data.append(caption_info)
-	# 			val_count[k]=1
+def getCategoriesInfo(file):
+	'''
+	v2i = {'': 0, 'UNK':1}  # vocabulary to index
+	limit_sen: the number sentence for training per video
+	'''
+	json_file = file+'/videodatainfo_2017.json'
+	train_info = json.load(open(json_file,'r'))
+	videos = train_info['videos']
+	cate_info = {}
+	for idx,video in enumerate(videos):
+		cate_info[video['video_id']]=video['category']
 
-	# print('thresholding size of train, val, test: %d, %d, %d' %(len(new_train_data),len(new_val_data),len(test_data)))
-	# return v2i, new_train_data, new_val_data, test_data
+	return cate_info
 
+def getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape):
+	batch_size = len(batch_caption)
+	input_categories = np.zeros((batch_size,1),dtype='float32')
 
+	for idx, caption in enumerate(batch_caption):
+		for k,v in caption.items():
+			input_categories[idx,0] = cate_info[k]
+	return input_categories
 
 
 def generate_vocab(train_data, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}):
@@ -130,6 +154,16 @@ def getBatchVideoFeature(batch_caption, hf, feature_shape):
 			input_video[idx] = np.reshape(feature,feature_shape)
 	return input_video
 
+def getBatchC3DVideoFeature(batch_caption, hf, feature_shape):
+	batch_size = len(batch_caption)
+	input_video = np.zeros((batch_size,)+tuple(feature_shape),dtype='float32')
+
+	for idx, caption in enumerate(batch_caption):
+		for k,v in caption.items():
+			vid = int(k[5:])
+			feature = hf[vid]
+			input_video[idx] = np.reshape(feature[0:40,:],feature_shape)
+	return input_video
 
 def getBatchStepVideoFeature(batch_caption, hf, feature_shape):
 	batch_size = len(batch_caption)
@@ -180,13 +214,57 @@ def getBatchTrainCaption(batch_caption, v2i, capl=16):
 					input_captions[idx][k+1] = v2i['UNK']
 			labels[idx][len(sen)][v2i['EOS']] = 1
 			if len(sen)+1<capl:
-				input_captions[idx][len(sen)+1] = 1
+				input_captions[idx][len(sen)+1] = v2i['EOS']
 	return input_captions, labels
 
-def getNewBatchTrainCaption(batch_caption, v2i, capl=16):
-	batch_size = len(batch_caption)
+
+
+# def getNewBatchTrainCaption(batch_caption, v2i, capl=16):
+# 	batch_size = len(batch_caption)
 
 	
+
+# 	input_captions = np.zeros((batch_size,capl),dtype='int32')
+# 	input_captions[:,0] = v2i['BOS']
+
+# 	for idx, caption in enumerate(batch_caption):
+# 		for vid, sen in caption.items():
+
+# 			for k, w in enumerate(sen):
+				
+# 				if w in v2i.keys():
+# 					input_captions[idx][k+1] = v2i[w]
+# 				else:
+# 					input_captions[idx][k+1] = v2i['UNK']
+
+# 	labels = np.zeros((batch_size,capl,len(v2i)),dtype='int32')
+# 	for i, sentence in enumerate(input_captions):
+# 		for j, word in enumerate(sentence):
+# 			if j>=1:
+# 				if word != 0:
+# 					labels[i,j-1,word]=1
+# 				elif word == 0:
+# 					labels[i,j-1,v2i['EOS']]=1
+# 					# break
+# 				# labels[i,j-1,word]=1
+
+# 	# print(batch_caption)
+# 	# print(input_captions)
+# 	# print(np.sum(labels,-1))
+# 	return input_captions, labels
+def getBatchTestCaption(batch_caption, v2i, capl=16):
+	batch_size = len(batch_caption)
+	labels = np.zeros((batch_size,capl,len(v2i)),dtype='int32')
+	input_captions = np.zeros((batch_size,capl),dtype='int32')
+	input_captions[:,0] = v2i['BOS']
+
+
+	return input_captions, labels
+
+def getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=16):
+	batch_size = len(batch_caption)
+
+	labels = np.zeros((batch_size,capl),dtype='int32')
 
 	input_captions = np.zeros((batch_size,capl),dtype='int32')
 	input_captions[:,0] = v2i['BOS']
@@ -197,55 +275,34 @@ def getNewBatchTrainCaption(batch_caption, v2i, capl=16):
 			for k, w in enumerate(sen):
 				
 				if w in v2i.keys():
+					labels[idx][k]=v2i[w] 
 					input_captions[idx][k+1] = v2i[w]
 				else:
+					labels[idx][k]= v2i['UNK']
 					input_captions[idx][k+1] = v2i['UNK']
-
-	labels = np.zeros((batch_size,capl,len(v2i)),dtype='int32')
-	for i, sentence in enumerate(input_captions):
-		for j, word in enumerate(sentence):
-			if j>=1:
-				if word != 0:
-					labels[i,j-1,word]=1
-				elif word == 0:
-					labels[i,j-1,v2i['EOS']]=1
-					# break
-				# labels[i,j-1,word]=1
-
-	# print(batch_caption)
-	# print(input_captions)
-	# print(np.sum(labels,-1))
+			labels[idx][len(sen)]= v2i['EOS']
+			if len(sen)+1<capl:
+				input_captions[idx][len(sen)+1] = v2i['EOS']
 	return input_captions, labels
-def getBatchTestCaption(batch_caption, v2i, capl=16):
+def getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=16):
 	batch_size = len(batch_caption)
-	labels = np.zeros((batch_size,capl,len(v2i)),dtype='int32')
+	labels = np.zeros((batch_size,capl),dtype='int32')
 	input_captions = np.zeros((batch_size,capl),dtype='int32')
 	input_captions[:,0] = v2i['BOS']
 
 
 	return input_captions, labels
-
-
 def convertCaptionI2V(batch_caption, generated_captions,i2v):
 	captions = []
 	for idx, sen in enumerate(generated_captions):
 		caption = ''
 		for word in sen:
-			if i2v[word]=='EOS':
+			if i2v[word]=='EOS' or i2v[word]=='':
 				break
 			caption+=i2v[word]+' '
 		captions.append(caption)
 	return captions
 
-def convertCaptionWithZeroDonetoken(batch_caption, generated_captions,i2v, donetoken=0):
-	captions = []
-	for idx, sen in enumerate(generated_captions):
-		caption = ''
-		for word in sen:
-			if i2v[word]=='EOS' or word==donetoken:
-				break
-			caption+=i2v[word]+' '
-		captions.append(caption)
-	return captions
+
 if __name__=='__main__':
 	main()
