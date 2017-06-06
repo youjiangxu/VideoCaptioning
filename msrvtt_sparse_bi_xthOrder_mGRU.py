@@ -6,7 +6,7 @@ import math
 from utils import MsrDataUtil
 from model import MultipleCaptionModel 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -33,11 +33,19 @@ def exe_train(sess, data, batch_size, v2i, hf, feature_shape,
 		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		data_c, data_y = MsrDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 
+		flag = np.random.randint(0,2)
+		if flag==1:
+			data_v = data_v[:,::-1,:]
+
 		_, l = sess.run([train,loss],feed_dict={input_video:data_v, input_captions:data_c,  y:data_y})
 		total_loss += l
 		print('    batch_idx:%d/%d, loss:%.5f' %(batch_idx+1,num_batch,l))
 	total_loss = total_loss/num_batch
 	return total_loss
+
+
+
+
 
 def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
 	predict_words, input_video, input_captions, y, capl=16):
@@ -63,6 +71,7 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	js['val_predictions'] = caption_output
 
 	return js
+
 def beam_search_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
 	predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_logprobs, capl=16):
 	
@@ -124,7 +133,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
 	attentionCaptionModel = MultipleCaptionModel.mGRU3thOrderCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8], 
-		max_len = capl, beamsearch_batchsize = 1, beam_size=3)
+		max_len = capl, beamsearch_batchsize = 1, beam_size=5)
 
 
 	predict_score, predict_words, loss_mask, finished_beam, logprobs_finished_beams, past_logprobs = attentionCaptionModel.build_model()
@@ -207,6 +216,7 @@ if __name__ == '__main__':
 
 	d_w2v = 512
 	output_dim = 512
+	capl=17
 
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video
@@ -222,7 +232,7 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = '3th_order_beamsearch_sparse_mgru_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'bi_3th_order_beamsearch_sparse_mgru_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
 	feature_path = '/data/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
@@ -241,12 +251,12 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
-	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_w1_sparse_mgru1248_attention_resnet152_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E7_L2.67342706254.ckpt'
+	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_bi_3th_order_beamsearch_sparse_mgru_attention_resnet152_dw2v512_outputdim512/lr0.0001_f40_B128/model/E9_L2.92812078367.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
+	main(hf,f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=128,total_epoch=40,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
 	
 
 	

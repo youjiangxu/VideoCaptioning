@@ -6,6 +6,8 @@ import tensorflow as tf
 import numpy as np
 import InitUtil
 
+import math
+
 rng = np.random
 rng.seed(1234)
 
@@ -144,8 +146,8 @@ class CaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_e_z, self.b_e_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_e_h, self.b_e_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_e_h))
 
 			
@@ -229,8 +231,8 @@ class CaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_d_z, self.b_d_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_d_h, self.b_d_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h))
 
 			
@@ -505,8 +507,8 @@ class AttentionCaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_e_z, self.b_e_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_e_h, self.b_e_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_e_h))
 
 			
@@ -604,8 +606,8 @@ class AttentionCaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_d_z, self.b_d_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_d_h, self.b_d_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + tf.matmul(attend_fea,self.A_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + tf.matmul(attend_fea,self.A_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + tf.matmul(attend_fea,self.A_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + tf.matmul(attend_fea,self.A_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h) + tf.matmul(attend_fea,self.A_h))
 
 			
@@ -739,7 +741,8 @@ class UnsupTrainingAttentionCaptionModel(object):
 	'''
 		caption model for ablation studying
 	'''
-	def __init__(self, input_feature, input_captions, unsup_input_feature, unsup_decoder_feature, voc_size, d_w2v, output_dim,  attention_dim = 100, dropout=0.5,
+	def __init__(self, input_feature, input_captions, unsup_input_feature, unsup_decoder_feature, voc_size, d_w2v, output_dim,  
+		T_k=[1,3,6], attention_dim = 100, dropout=0.5,
 		inner_activation='hard_sigmoid',activation='tanh',
 		return_sequences=True):
 		self.input_feature = input_feature
@@ -752,6 +755,8 @@ class UnsupTrainingAttentionCaptionModel(object):
 		self.voc_size = voc_size
 		self.d_w2v = d_w2v
 		self.output_dim = output_dim
+
+		self.T_k = T_k
 		self.dropout = dropout
 
 		self.inner_activation = inner_activation
@@ -848,6 +853,11 @@ class UnsupTrainingAttentionCaptionModel(object):
 
 		self.A_p_h = InitUtil.init_weight_variable((self.unsup_decoder_input_shape[-1],self.output_dim),init_method='orthogonal',name="A_p_h")
 
+
+		# multirate
+		self.block_length = int(math.ceil(self.output_dim/len(self.T_k)))
+		print('block_length:%d'%self.block_length)
+
 		# classification parameters
 		self.W_c = InitUtil.init_weight_variable((self.output_dim,self.voc_size),init_method='uniform',name='W_c')
 		self.b_c = InitUtil.init_bias_variable((self.voc_size,),name="b_c")
@@ -911,7 +921,13 @@ class UnsupTrainingAttentionCaptionModel(object):
 	            size=timesteps,
 	            tensor_array_name='hidden_states')
 
-
+		self.array_clock = []
+		
+		for idx, T_i in enumerate(self.T_k):
+			self.array_clock.append(tf.ones_like(initial_state[:,idx*self.block_length:min((idx+1)*self.block_length,self.output_dim)],
+				dtype=tf.int32)*T_i
+				)
+		self.array_clock = tf.concat(self.array_clock,axis=-1)	
 		def feature_step(time, hidden_states, h_tm1):
 			x_t = input_feature.read(time) # batch_size * dim
 
@@ -919,12 +935,16 @@ class UnsupTrainingAttentionCaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_e_z, self.b_e_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_e_h, self.b_e_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_e_h))
 
 			
-			h = (1-z)*hh + z*h_tm1
+			h_t = (1-z)*hh + z*h_tm1
+
+			h = tf.where(tf.equal(tf.mod(time,self.array_clock),0),
+				h_t,
+				h_tm1)
 
 			hidden_states = hidden_states.write(time, h)
 
@@ -1018,8 +1038,8 @@ class UnsupTrainingAttentionCaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_d_z, self.b_d_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_d_h, self.b_d_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + tf.matmul(attend_fea,self.A_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + tf.matmul(attend_fea,self.A_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + tf.matmul(attend_fea,self.A_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + tf.matmul(attend_fea,self.A_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h) + tf.matmul(attend_fea,self.A_h))
 
 			
@@ -1196,8 +1216,8 @@ class UnsupTrainingAttentionCaptionModel(object):
 			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_p_z, self.b_p_z)
 			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_p_h, self.b_p_h)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_p_r) + tf.matmul(attend_fea,self.A_p_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_p_z) + tf.matmul(attend_fea,self.A_p_z))
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_p_r) + tf.matmul(attend_fea,self.A_p_r))
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_p_z) + tf.matmul(attend_fea,self.A_p_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_p_h) + tf.matmul(attend_fea,self.A_p_h))
 
 			

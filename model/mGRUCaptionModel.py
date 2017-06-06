@@ -1448,6 +1448,35 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 		finished_beam, logprobs_finished_beams, past_symbols, beam_hidden_state, past_symbols_states, finished_beams_states = self.beamSearchDecoder(last_output)
 		return predict_score, predict_words, loss_mask, finished_beam, logprobs_finished_beams, past_symbols, beam_hidden_state, past_symbols_states, finished_beams_states
 
+
+class mGRUBidirectionalAttentionCaptionModel(mGRUAttentionCaptionModel):
+	'''
+		caption model for ablation studying
+	'''
+	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, T_k=[1,3,6], attention_dim = 100, dropout=0.5,
+		inner_activation='hard_sigmoid',activation='tanh',
+		return_sequences=True):
+		self.input_feature = tf.concat([input_feature,input_feature[:,::-1,:]],-2)
+		self.input_captions = input_captions
+
+		self.voc_size = voc_size
+		self.d_w2v = d_w2v
+		self.output_dim = output_dim
+
+		self.T_k = T_k
+		self.dropout = dropout
+
+		self.inner_activation = inner_activation
+		self.activation = activation
+		self.return_sequences = return_sequences
+		self.attention_dim = attention_dim
+
+		self.encoder_input_shape = self.input_feature.get_shape().as_list()
+		print('encoder_input_shape:',self.encoder_input_shape)
+		self.decoder_input_shape = self.input_captions.get_shape().as_list()
+
+
+
 class mGRUAttentionBeamsearchCaptionMergedFeaureModel(mGRUAttentionBeamsearchCaptionModel):
 	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5, 
 		T_k=[1,3,6], attention_dim = 100, dropout=0.5,

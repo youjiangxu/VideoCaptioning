@@ -7,7 +7,7 @@ from utils import MsrDataUtil
 from model import CaptionModel 
 from model import Losses
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -31,22 +31,22 @@ def exe_unsup_train(sess, data, batch_size, v2i, hf, unsup_training_feature_shap
 		# if batch_idx < 100:
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 
-		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,(40,2048))
+		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,(80,2048))
 
-		if flip:
-			isflip = np.random.randint(0,2)
-			if isflip==1:
-				data_v = data_v[:,::-1]
+		# if flip:
+		# 	isflip = np.random.randint(0,2)
+		# 	if isflip==1:
+		# 		data_v = data_v[:,::-1]
 
-		start = np.random.randint(0,10)
-		data_v = data_v[:,start:start+30]
+		# start = np.random.randint(0,10)
+		# data_v = data_v[:,start:start+30]
 
-		input_v = data_v[:,0:20,:]
+		input_v = data_v[:,0:40,:]
 
-		input_pred_v = np.zeros((batch_size,10,2048),dtype=np.float32)
+		input_pred_v = np.zeros((batch_size,40,2048),dtype=np.float32)
 
-		input_pred_v[:,1::]=data_v[:,20:29]
-		gt_video = data_v[:,20::]
+		input_pred_v[:,1::]=data_v[:,40:79]
+		gt_video = data_v[:,40::]
 
 		_, l = sess.run([train,loss],feed_dict={unsup_input_feature:input_v, unsup_decoder_feature:input_pred_v, true_video:gt_video})
 		total_loss += l
@@ -68,22 +68,22 @@ def exe_unsup_test(sess, data, batch_size, v2i, hf, unsup_training_feature_shape
 		# if batch_idx < 100:
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		number_sample = len(batch_caption)
-		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,(40,2048))
+		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,(80,2048))
 
-		if flip:
-			isflip = np.random.randint(0,2)
-			if isflip==1:
-				data_v = data_v[:,::-1]
+		# if flip:
+		# 	isflip = np.random.randint(0,2)
+		# 	if isflip==1:
+		# 		data_v = data_v[:,::-1]
 
-		start = np.random.randint(0,10)
-		data_v = data_v[:,start:start+30]
+		# start = np.random.randint(0,10)
+		# data_v = data_v[:,start:start+30]
 
-		input_v = data_v[:,0:20,:]
+		input_v = data_v[:,0:40,:]
 
-		input_pred_v = np.zeros((number_sample,10,2048),dtype=np.float32)
+		input_pred_v = np.zeros((number_sample,40,2048),dtype=np.float32)
 
-		input_pred_v[:,1::]=data_v[:,20:29]
-		gt_video = data_v[:,20::]
+		input_pred_v[:,1::]=data_v[:,40:79]
+		gt_video = data_v[:,40::]
 
 		l = sess.run(loss,feed_dict={unsup_input_feature:input_v, unsup_decoder_feature:input_pred_v, true_video:gt_video})
 		total_loss += l
@@ -109,7 +109,7 @@ def exe_train(sess, data, batch_size, v2i, hf, feature_shape,
 
 		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		
-		data_c, data_y = MsrDataUtil.getNewBatchTrainCaption(batch_caption, v2i, capl=capl)
+		data_c, data_y = MsrDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 
 		_, l = sess.run([train,loss],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 		total_loss += l
@@ -128,7 +128,7 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
 		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-		data_c, data_y = MsrDataUtil.getBatchTestCaption(batch_caption, v2i, capl=capl)
+		data_c, data_y = MsrDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
 		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
@@ -169,33 +169,38 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	voc_size = len(v2i)
 	input_video = tf.placeholder(tf.float32, shape=(None,)+feature_shape,name='input_video')
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
-	y = tf.placeholder(tf.int32,shape=(None, capl,len(v2i)))
+	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	unsup_input_video = tf.placeholder(tf.float32, shape=(None,)+(20,2048),name='unsup_input_video')
-	unsup_decoder_feature = tf.placeholder(tf.float32, shape=(None,)+(10,2048),name='unsup_decoder_feature')
-	true_video = tf.placeholder(tf.float32, shape=(None,)+(10,2048),name='true_video')
+	unsup_input_video = tf.placeholder(tf.float32, shape=(None,)+(40,2048),name='unsup_input_video')
+	unsup_decoder_feature = tf.placeholder(tf.float32, shape=(None,)+(40,2048),name='unsup_decoder_feature')
+	true_video = tf.placeholder(tf.float32, shape=(None,)+(40,2048),name='true_video')
 
 
 	#
 	#
-	attentionCaptionModel = CaptionModel.UnsupTrainingAttentionCaptionModel(input_video, input_captions, unsup_input_video, unsup_decoder_feature, voc_size, d_w2v, output_dim)
+	attentionCaptionModel = CaptionModel.UnsupTrainingAttentionCaptionModel(input_video, input_captions, unsup_input_video, 
+															unsup_decoder_feature, voc_size, d_w2v, output_dim,
+															T_k=[1,2,4,8])
 	predict_score, predict_words, predict_vector = attentionCaptionModel.build_model()
 	
 	huber_Loss = Losses.Huber_Loss(predict_vector, true_video)
 	unsup_training_loss = huber_Loss.build()
 	print('unsup_training_loss.get_shape().as_list()',unsup_training_loss.get_shape().as_list())
-	unsup_training_loss = tf.reduce_mean(tf.reduce_sum(unsup_training_loss,axis=[1,2]))+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+	unsup_training_loss = tf.reduce_mean(tf.reduce_sum(unsup_training_loss,axis=[1,2])+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)))
 	optimizer = tf.train.AdamOptimizer(learning_rate=lr,beta1=0.9,beta2=0.999,epsilon=1e-08,use_locking=False,name='Adam')
-	# optimizer = tf.train.RMSPropOptimizer(lr,decay=0.9, momentum=0.0, epsilon=1e-8)
 	gvs = optimizer.compute_gradients(unsup_training_loss)
 	capped_gvs = [(tf.clip_by_global_norm([grad], 10)[0][0], var) for grad, var in gvs ]
 	unsup_training = optimizer.apply_gradients(capped_gvs)
-	# unsup_training = optimizer.minimize(unsup_training_loss)
 
 
-	caption_loss = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
-	caption_loss = tf.reduce_mean(caption_loss)#+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-	caption_training = optimizer.minimize(caption_loss)
+	caption_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+	caption_loss = tf.reduce_mean(caption_loss)#
+
+	caption_gvs = optimizer.compute_gradients(caption_loss)
+	caption_capped_gvs = [(tf.clip_by_global_norm([grad], 10)[0][0], var) for grad, var in caption_gvs ]
+	caption_training = optimizer.apply_gradients(caption_capped_gvs)
+
+	# caption_training = optimizer.minimize(caption_loss)
 	# 
 
 	'''
@@ -218,9 +223,9 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 			print('restore pre trained file:' + pretrained_model)
 
 
-		export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s'+'_'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
+		export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
 		
-		# unsupervised training 
+		# # #unsupervised training 
 		# for epoch in xrange(unsup_epoch):
 		# 	print('Unsupervised Epoch: %d/%d, Batch_size: %d' %(epoch+1,unsup_epoch,batch_size))
 		# 	# # train phase
@@ -283,12 +288,12 @@ if __name__ == '__main__':
 
 	
 	video_feature_dims=2048
-	timesteps_v=40 # sequences length for video
+	timesteps_v=80 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 	unsup_training_feature_shape = (timesteps_v/2,video_feature_dims)
 
-	f_type = 'adam_regu_flip_unsup_attention_resnet152'
-	feature_path = '/data/xyj/resnet152_pool5_f40.h5'
+	f_type = 'adam_regu_unsup_attention_resnet152'
+	feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f80.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 
 	# video_feature_dims=1024
@@ -304,7 +309,7 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_adam_regu_flip_unsup_attention_resnet152/lr0.0001_f40_B64/model/E6_L2.19120268549.ckpt'
+	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/adam_regu_flip_unsup_attention_resnet152/lr0.0001_f80_B64/unsupervised/E2_L8667.36795628.ckpt'
 	
 	main(hf,f_type,capl=20, d_w2v=512, output_dim=512,
 		feature_shape=feature_shape,unsup_training_feature_shape=unsup_training_feature_shape,

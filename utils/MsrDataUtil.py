@@ -127,6 +127,15 @@ def getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape):
 			input_categories[idx,0] = cate_info[k]
 	return input_categories
 
+def getBatchVideoAudioInfo(batch_caption, audio_info):
+	batch_size = len(batch_caption)
+	input_audio = np.zeros((batch_size,68,40),dtype='float32')
+
+	for idx, caption in enumerate(batch_caption):
+		for k,v in caption.items():
+			vid = int(k[5:])
+			input_audio[idx,:,:] = audio_info[vid]
+	return input_audio
 
 def generate_vocab(train_data, v2i={'': 0, 'UNK':1, 'BOS':2, 'EOS':3}):
 

@@ -83,7 +83,7 @@ def beam_search_exe_test(sess, data, cate_info, batch_size, v2i, i2v, hf, featur
 		[gw,tw,gp, gl] = sess.run([finished_beam, predict_words, logprobs_finished_beams, past_logprobs],
 			                  feed_dict={input_video:data_v, input_captions:data_c, input_categories:data_cate, y:data_y})
 
-		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, tw, i2v)
+		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
 
 		for idx, sen in enumerate(generated_captions):
 			print('%s : %s' %(batch_caption[idx].keys()[0],sen))
@@ -211,7 +211,10 @@ if __name__ == '__main__':
 
 	d_w2v = 1024
 	output_dim = 1024
-
+	
+	capl=20
+	batch_size=128
+	total_epoch=40
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
@@ -245,11 +248,11 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_categories_sparse_mgru1248_attention_resnet152_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E10_L2.85730279397.ckpt'
+	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_categories_sparse_mgru1248_attention_resnet152_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E6_L2.7598314518.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=512, output_dim=512,
+	main(hf,f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
-		batch_size=128,total_epoch=40,
+		batch_size=batch_size,total_epoch=total_epoch,
 		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
 	
 

@@ -177,6 +177,10 @@ if __name__ == '__main__':
 	d_w2v = 1024
 	output_dim = 1024
 
+	capl=20
+	batch_size=128
+	total_epoch=40
+
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
@@ -212,9 +216,9 @@ if __name__ == '__main__':
 
 	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_mgru_attention_resnet152/lr0.0002_f40/model/E25_L0.736578735637.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=512, output_dim=512,
+	main(hf,f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
-		batch_size=128,total_epoch=40,
+		batch_size=batch_size,total_epoch=total_epoch,
 		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 
