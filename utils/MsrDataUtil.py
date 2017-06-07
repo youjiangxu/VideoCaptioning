@@ -129,7 +129,7 @@ def getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape):
 
 def getBatchVideoAudioInfo(batch_caption, audio_info):
 	batch_size = len(batch_caption)
-	input_audio = np.zeros((batch_size,68,40),dtype='float32')
+	input_audio = np.zeros((batch_size,34,2),dtype='float32')
 
 	for idx, caption in enumerate(batch_caption):
 		for k,v in caption.items():

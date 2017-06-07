@@ -132,7 +132,7 @@ class mGRUAstarAttentionCaptionModel(object):
 		return T_w2v, T_mask 
 	def encoder(self):
 		input_fc_feature = self.input_feature1
-		input_fc_feature = tf.reduce_sum(input_fc_feature,axis=1)
+		input_fc_feature = tf.reduce_mean(input_fc_feature,axis=1)
 
 		input_fc_feature = tf.nn.xw_plus_b(input_fc_feature, self.W_e, self.b_e)
 		return input_fc_feature

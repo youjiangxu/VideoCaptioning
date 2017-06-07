@@ -120,11 +120,11 @@ def main(hf, audio_info, f_type,capl=16, d_w2v=512, output_dim=512,
 
 	input_video = tf.placeholder(tf.float32, shape=(None,)+feature_shape,name='input_video')
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
-	input_audio = tf.placeholder(tf.float32, shape=(None,68,40), name='input_audio')
+	input_audio = tf.placeholder(tf.float32, shape=(None,34,2), name='input_audio')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
 	attentionCaptionModel = mGRUAudioModel.mGRUAudioAttentionBeamsearchCaptionModel(input_video, input_captions, input_audio, voc_size, d_w2v, output_dim, 
-		input_audio_dim=68, T_k=[1,2,4,8], max_len = 20, beamsearch_batchsize = 1, beam_size=5)
+		input_audio_dim=34, T_k=[1,2,4,8], max_len = 20, beamsearch_batchsize = 1, beam_size=5)
 
 	predict_score, predict_words, loss_mask, finished_beam, logprobs_finished_beams, past_logprobs, = attentionCaptionModel.build_model()
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
@@ -211,7 +211,7 @@ if __name__ == '__main__':
 	output_dim = 512
 	
 	capl=20
-	batch_size=64
+	batch_size=128
 	total_epoch=20
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video
@@ -246,14 +246,14 @@ if __name__ == '__main__':
 	---------------------------------
 	'''
 	hf = h5py.File(feature_path,'r')['images']
-	audio_info = np.load('/home/xyj/usr/local/data/msrvtt/audio2feats_channel2_f40.npy')
-	print('audio_info:','/home/xyj/usr/local/data/msrvtt/audio2feats_channel2_f40.npy')
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_audio_sparse_mgru1248_attention_resnet152_dw2v512_outdim512/lr0.0001_f40_B64/model/E2_L3.76600125387.ckpt'
+	audio_info = np.load('/home/xyj/usr/local/data/msrvtt/audio2feats_ch1_mean_std.npy')
+	print('audio_info:','/home/xyj/usr/local/data/msrvtt/audio2feats_ch1_mean_std.npy')
+	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_audio_sparse_mgru1248_attention_resnet152_dw2v512_outdim512/lr0.0001_f40_B64/model/E2_L3.76600125387.ckpt'
 	
 	main(hf, audio_info, f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=batch_size,total_epoch=total_epoch,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 
 	

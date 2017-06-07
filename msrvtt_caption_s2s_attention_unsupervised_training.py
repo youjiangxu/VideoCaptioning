@@ -7,7 +7,7 @@ from utils import MsrDataUtil
 from model import CaptionModel 
 from model import Losses
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -225,22 +225,22 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 
 		export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
 		
-		# # #unsupervised training 
-		# for epoch in xrange(unsup_epoch):
-		# 	print('Unsupervised Epoch: %d/%d, Batch_size: %d' %(epoch+1,unsup_epoch,batch_size))
-		# 	# # train phase
-		# 	tic = time.time()
-		# 	total_loss = exe_unsup_train(sess, train_data, batch_size, v2i, hf, unsup_training_feature_shape, unsup_training, unsup_training_loss, unsup_input_video, unsup_decoder_feature, true_video,capl=capl)
+		# #unsupervised training 
+		for epoch in xrange(unsup_epoch):
+			print('Unsupervised Epoch: %d/%d, Batch_size: %d' %(epoch+1,unsup_epoch,batch_size))
+			# # train phase
+			tic = time.time()
+			total_loss = exe_unsup_train(sess, train_data, batch_size, v2i, hf, unsup_training_feature_shape, unsup_training, unsup_training_loss, unsup_input_video, unsup_decoder_feature, true_video,capl=capl)
 
-		# 	print('    --Unsupervised Training--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
-		# 	tic = time.time()
-		# 	total_loss = exe_unsup_test(sess, test_data, batch_size, v2i, hf, unsup_training_feature_shape, unsup_training_loss, unsup_input_video, unsup_decoder_feature, true_video,capl=capl)
-		# 	print('    --Unsupervised Testing--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
+			print('    --Unsupervised Training--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
+			tic = time.time()
+			total_loss = exe_unsup_test(sess, test_data, batch_size, v2i, hf, unsup_training_feature_shape, unsup_training_loss, unsup_input_video, unsup_decoder_feature, true_video,capl=capl)
+			print('    --Unsupervised Testing--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
-		# 	if not os.path.exists(export_path+'/unsupervised'):
-		# 		os.makedirs(export_path+'/unsupervised')
-		# 		print('mkdir %s' %export_path+'/unsupervised')
-		# 	save_path = saver.save(sess, export_path+'/unsupervised/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
+			if not os.path.exists(export_path+'/unsupervised'):
+				os.makedirs(export_path+'/unsupervised')
+				print('mkdir %s' %export_path+'/unsupervised')
+			save_path = saver.save(sess, export_path+'/unsupervised/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
 
 		for epoch in xrange(total_epoch):
 			# # shuffle
@@ -309,12 +309,12 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/adam_regu_flip_unsup_attention_resnet152/lr0.0001_f80_B64/unsupervised/E2_L8667.36795628.ckpt'
+	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/adam_regu_flip_unsup_attention_resnet152/lr0.0001_f80_B64/unsupervised/E2_L8667.36795628.ckpt'
 	
 	main(hf,f_type,capl=20, d_w2v=512, output_dim=512,
 		feature_shape=feature_shape,unsup_training_feature_shape=unsup_training_feature_shape,
-		lr=lr,batch_size=64,total_epoch=20,unsup_epoch=3,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
+		lr=lr,batch_size=64,total_epoch=20,unsup_epoch=1,
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 
 	
