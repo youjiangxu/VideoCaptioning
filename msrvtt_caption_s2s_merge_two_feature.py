@@ -6,7 +6,7 @@ import math
 from utils import MsrDataUtil
 from model import mGRUCaptionModel 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -68,9 +68,10 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf1, hf2, feature_shape,
 		data_v = np.concatenate((data_v1,data_v2),axis=-1)
 		
 		data_c, data_y = MsrDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
-		[gw,tw,gp, gl, pp, pss, fbs] = sess.run([finished_beam, predict_words, logprobs_finished_beams, past_logprobs, beam_hidden_state, past_symbols_states, finished_beams_states],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
+		# [gw,tw,gp, gl, pp, pss, fbs] = sess.run([finished_beam, predict_words, logprobs_finished_beams, past_logprobs, beam_hidden_state, past_symbols_states, finished_beams_states],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
+		[tw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
-		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
+		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, tw, i2v)
 
 		for idx, sen in enumerate(generated_captions):
 			print('%s : %s' %(batch_caption[idx].keys()[0],sen))
@@ -151,7 +152,7 @@ def main(hf1,hf2,f_type,capl=16, d_w2v=512, output_dim=512,
 			print('restore pre trained file:' + pretrained_model)
 
 		for epoch in xrange(total_epoch):
-			# # shuffle
+			# shuffle
 			print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
 			# train phase
 			tic = time.time()
@@ -160,7 +161,7 @@ def main(hf1,hf2,f_type,capl=16, d_w2v=512, output_dim=512,
 			print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
 			tic = time.time()
-			js = exe_test(sess, test_data, 1, v2i, i2v, hf1, hf2, feature_shape, 
+			js = exe_test(sess, test_data, batch_size, v2i, i2v, hf1, hf2, feature_shape, 
 										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_logprobs, beam_hidden_state, past_symbols_states, finished_beams_states, capl=capl)
 			print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
@@ -189,8 +190,8 @@ if __name__ == '__main__':
 
 	lr = 0.0001
 
-	d_w2v = 1024
-	output_dim = 1024
+	d_w2v = 512
+	output_dim = 512
 
 	video_feature_dims=2048+4096
 	timesteps_v=40 # sequences length for video
@@ -202,7 +203,7 @@ if __name__ == '__main__':
 	f_type = 'norm_sparse_mgru_merge_c3d_resnet_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
 	
 	# feature_path2 = '/data/xyj/msrvtt_c3d_fc6.h5'
-	feature_path2 = '/home/xyj/usr/local/data/msrvtt/msrvtt_c3d_fc6.h5'
+	feature_path2 = '/data/xyj/places205-alex-fc7-40f.h5'
 	feature_shape2 = (timesteps_v,4096)
 
 	feature_shape = (timesteps_v,video_feature_dims)
@@ -243,12 +244,12 @@ if __name__ == '__main__':
 	'''
 	hf1 = h5py.File(feature_path1,'r')['images']
 	hf2 = h5py.File(feature_path2,'r')['images']
-	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_sparse_mgru_merge_c3d_resnet_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E5_L2.84255223031.ckpt'
+	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_norm_sparse_mgru_merge_c3d_resnet_dw2v512_outputdim512/lr0.0001_f40_B128/model/E1_L5.29438385839.ckpt'
 	
-	main(hf1,hf2,f_type,capl=20, d_w2v=1024, output_dim=1024,
+	main(hf1,hf2,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=128,total_epoch=40,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
 	
 
 	
