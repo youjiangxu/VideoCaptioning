@@ -102,9 +102,9 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	predict_score, predict_words, loss_mask = attentionCaptionModel.build_model()
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 
-	loss = tf.reduce_sum(loss,reduction_indices=[-1])/tf.reduce_sum(loss_mask,reduction_indices=[-1])
+	loss = tf.reduce_sum(loss,reduction_indices=[-1])/tf.reduce_sum(loss_mask,reduction_indices=[-1])+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
-	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+	loss = tf.reduce_mean(loss)
 
 	optimizer = tf.train.AdamOptimizer(learning_rate=lr,beta1=0.9,beta2=0.999,epsilon=1e-08,use_locking=False,name='Adam')
 	
@@ -174,12 +174,12 @@ if __name__ == '__main__':
 
 	lr = 0.0001
 
-	d_w2v = 1024
-	output_dim = 1024
+	d_w2v = 512
+	output_dim = 512
 
 	capl=20
 	batch_size=128
-	total_epoch=40
+	total_epoch=20
 
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video

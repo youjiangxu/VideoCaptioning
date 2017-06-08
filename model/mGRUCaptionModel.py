@@ -1482,7 +1482,9 @@ class mGRUAttentionBeamsearchCaptionMergedFeaureModel(mGRUAttentionBeamsearchCap
 		T_k=[1,3,6], attention_dim = 100, dropout=0.5,
 		inner_activation='hard_sigmoid',activation='tanh',
 		return_sequences=True):
-		self.input_feature = tf.concat([tf.nn.l2_normalize(input_feature[:,:,0:2048],-1),tf.nn.l2_normalize(input_feature[:,:,2048::],-1)],-1)
+		# self.input_feature = tf.concat([tf.nn.l2_normalize(input_feature[:,:,0:2048],-1),tf.nn.l2_normalize(input_feature[:,:,2048::],-1)],-1)
+		self.input_feature = input_feature
+
 		self.input_captions = input_captions
 
 		self.voc_size = voc_size
