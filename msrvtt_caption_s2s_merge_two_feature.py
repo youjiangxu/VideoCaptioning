@@ -244,7 +244,7 @@ if __name__ == '__main__':
 	'''
 	hf1 = h5py.File(feature_path1,'r')['images']
 	hf2 = h5py.File(feature_path2,'r')['images']
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_norm_sparse_mgru_merge_c3d_resnet_dw2v512_outputdim512/lr0.0001_f40_B128/model/E1_L5.29438385839.ckpt'
+	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_norm_sparse_mgru_merge_c3d_resnet_dw2v512_outputdim512/lr0.0001_f40_B128/model/E3_L3.49751681594.ckpt'
 	
 	main(hf1,hf2,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,

@@ -93,12 +93,11 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = mGRUCaptionModel.mGRUAttentionCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8])
+	attentionCaptionModel = mGRUCaptionModel.mLSTMAttentionCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8])
 	predict_score, predict_words, loss_mask = attentionCaptionModel.build_model()
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 
 	loss = tf.reduce_sum(loss,reduction_indices=[-1])/tf.reduce_sum(loss_mask,reduction_indices=[-1])
-
 
 	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
@@ -148,7 +147,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 			
 
 			#save model
-			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
+			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s'+'_'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
 			if not os.path.exists(export_path+'/model'):
 				os.makedirs(export_path+'/model')
 				print('mkdir %s' %export_path+'/model')
@@ -173,6 +172,8 @@ if __name__ == '__main__':
 	d_w2v = 512
 	output_dim = 512
 
+	capl=18
+
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
@@ -187,18 +188,18 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'sparse_mgru1248_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'mLSTM1248_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'c'+str(capl)
 	feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
 	---------------------------------
 	'''
-	# video_feature_dims=2048
+	# video_feature_dims=1024
 	# timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
 
-	# f_type = 'sparse_mgru1248_attention_resnet200_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
-	# feature_path = '/home/xyj/usr/local/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
+	# f_type = 'attention_GoogleNet'
+	# feature_path = '/mnt/data3/yzw/MSRVTT2017/features/googlenet_pl5_f'+str(timesteps_v)+'.h5'
 
 
 	'''
@@ -208,7 +209,7 @@ if __name__ == '__main__':
 
 	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_mgru_attention_resnet152/lr0.0002_f40/model/E25_L0.736578735637.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
+	main(hf,f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=128,total_epoch=20,
 		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)

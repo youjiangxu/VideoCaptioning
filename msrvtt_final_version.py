@@ -4,9 +4,9 @@ import h5py
 import math
 
 from utils import MsrDataUtil
-from model import mGRUCaptionModel 
+from model import mGRUCaptionCategoriesModel 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -15,8 +15,8 @@ import json
 
 
 		
-def exe_train(sess, data, batch_size, v2i, hf, feature_shape, 
-	train, loss, input_video, input_captions, y, capl=16):
+def exe_train(sess, data, cate_info, batch_size, v2i,  hf1, hf2, feature_shape1, feature_shape2, 
+	train, loss, input_video1, input_video2, input_captions, input_categories, y, capl=16):
 
 	np.random.shuffle(data)
 
@@ -30,17 +30,20 @@ def exe_train(sess, data, batch_size, v2i, hf, feature_shape,
 		# if batch_idx < 100:
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 
-		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-		data_c, data_y = MsrDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
+		data_v1 = MsrDataUtil.getBatchVideoFeature(batch_caption,hf1,feature_shape1)
+		data_v2 = MsrDataUtil.getBatchC3DVideoFeature(batch_caption,hf2,feature_shape2)
 
-		_, l = sess.run([train,loss],feed_dict={input_video:data_v, input_captions:data_c,  y:data_y})
+		data_c, data_y = MsrDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
+		data_cate = MsrDataUtil.getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape1)
+
+		_, l = sess.run([train,loss],feed_dict={input_video1:data_v1, input_video2:data_v2,  input_captions:data_c, input_categories:data_cate, y:data_y})
 		total_loss += l
 		print('    batch_idx:%d/%d, loss:%.5f' %(batch_idx+1,num_batch,l))
 	total_loss = total_loss/num_batch
 	return total_loss
 
-def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
-	predict_words, input_video, input_captions, y, capl=16):
+def exe_test(sess, data, cate_info, batch_size, v2i, i2v,  hf1, hf2, feature_shape1, feature_shape2, 
+	predict_words, input_video1, input_video2, input_captions, input_categories, y, capl=16):
 	
 	caption_output = []
 	total_data = len(data)
@@ -49,9 +52,13 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
-		data_v = MsrDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		data_v1 = MsrDataUtil.getBatchVideoFeature(batch_caption,hf1,feature_shape1)
+		data_v2 = MsrDataUtil.getBatchC3DVideoFeature(batch_caption,hf2,feature_shape2)
+		
 		data_c, data_y = MsrDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
-		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
+		data_cate = MsrDataUtil.getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape1)
+		
+		[gw] = sess.run([predict_words],feed_dict={input_video1:data_v1, input_video2:data_v2, input_captions:data_c, input_categories:data_cate, y:data_y})
 
 		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
 
@@ -73,8 +80,8 @@ def evaluate_mode_by_shell(res_path,js):
 	os.system(command)
 
 
-def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
-		feature_shape=None,lr=0.01,
+def main(hf1,hf2,f_type,capl=16, d_w2v=512, output_dim=512,
+		feature_shape1=None, feature_shape2=None,lr=0.01,
 		batch_size=64,total_epoch=100,
 		file=None,pretrained_model=None):
 	'''
@@ -83,22 +90,24 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 
 	# Create vocabulary
 	v2i, train_data, val_data, test_data = MsrDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	cate_info = MsrDataUtil.getCategoriesInfo(file)
 
 	i2v = {i:v for v,i in v2i.items()}
 
 	print('building model ...')
 	voc_size = len(v2i)
 
-	input_video = tf.placeholder(tf.float32, shape=(None,)+feature_shape,name='input_video')
+	input_video1 = tf.placeholder(tf.float32, shape=(None,)+feature_shape1,name='input_video')
+	input_video2 = tf.placeholder(tf.float32, shape=(None,)+feature_shape2,name='input_video')
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
+	input_categories = tf.placeholder(tf.int32, shape=(None,1), name='input_categories')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = mGRUCaptionModel.mGRUAttentionCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8])
+	attentionCaptionModel = mGRUCaptionCategoriesModel.mGRUFinalModel(input_video1, input_video2, input_captions, input_categories, voc_size, d_w2v, output_dim, T_k=[1,2,4,8])
 	predict_score, predict_words, loss_mask = attentionCaptionModel.build_model()
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 
 	loss = tf.reduce_sum(loss,reduction_indices=[-1])/tf.reduce_sum(loss_mask,reduction_indices=[-1])
-
 
 	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
@@ -116,7 +125,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.3
+	config.gpu_options.per_process_gpu_memory_fraction = 0.4
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -136,19 +145,20 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 			print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
 			# # train phase
 			tic = time.time()
-			total_loss = exe_train(sess, train_data, batch_size, v2i, hf, feature_shape, train, loss, input_video, input_captions, y, capl=capl)
+			total_loss = exe_train(sess, train_data, cate_info, batch_size, v2i, hf1, hf2, feature_shape1, feature_shape2, 
+			 							train, loss, input_video1, input_video2, input_captions, input_categories, y, capl=capl)
 
 			print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
 			tic = time.time()
-			js = exe_test(sess, test_data, batch_size, v2i, i2v, hf, feature_shape, 
-										predict_words, input_video, input_captions, y, capl=capl)
+			js = exe_test(sess, test_data, cate_info, batch_size, v2i, i2v, hf1, hf2, feature_shape1, feature_shape2, 
+										predict_words, input_video1, input_video2, input_captions, input_categories, y, capl=capl)
 			print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
 			
 
 			#save model
-			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
+			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape1[0])+'_B'+str(batch_size)
 			if not os.path.exists(export_path+'/model'):
 				os.makedirs(export_path+'/model')
 				print('mkdir %s' %export_path+'/model')
@@ -173,6 +183,10 @@ if __name__ == '__main__':
 	d_w2v = 512
 	output_dim = 512
 
+	capl=20
+	batch_size=128
+	total_epoch=20
+
 	# video_feature_dims=4096
 	# timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
@@ -183,34 +197,45 @@ if __name__ == '__main__':
 	'''
 	---------------------------------
 	'''
-	video_feature_dims=2048
+	# video_feature_dims=2048+4096
 	timesteps_v=40 # sequences length for video
-	feature_shape = (timesteps_v,video_feature_dims)
+	# feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'sparse_mgru1248_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
-	feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
+	f_type = 'categories+resnet200+c3dpool5max_mgru1248_attention_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	# feature_path1 = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
+	feature_path1 = '/home/xyj/usr/local/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
+	feature_shape1 = (timesteps_v,2048)
+
+	# feature_path2 = '/home/xyj/usr/local/data/msrvtt/places205-alex-fc7-40f.h5'
+	# feature_path2 = '/home/xyj/usr/local/data/msrvtt/msrvtt_c3d_fc7.h5'
+	# feature_path2 = '/home/xyj/usr/local/data/msrvtt/c3d_fc7_f40.h5'
+	# feature_shape2 = (timesteps_v,4096)
+
+	feature_path2 = '/home/xyj/usr/local/data/msrvtt/c3d_pool5max_f40.h5'
+	feature_shape2 = (timesteps_v,512)
+
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
 	---------------------------------
 	'''
-	# video_feature_dims=2048
+	# video_feature_dims=1024
 	# timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
 
-	# f_type = 'sparse_mgru1248_attention_resnet200_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
-	# feature_path = '/home/xyj/usr/local/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
+	# f_type = 'attention_GoogleNet'
+	# feature_path = '/mnt/data3/yzw/MSRVTT2017/features/googlenet_pl5_f'+str(timesteps_v)+'.h5'
 
 
 	'''
 	---------------------------------
 	'''
-	hf = h5py.File(feature_path,'r')['images']
-
-	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_mgru_attention_resnet152/lr0.0002_f40/model/E25_L0.736578735637.ckpt'
+	hf1 = h5py.File(feature_path1,'r')['images']
+	hf2 = h5py.File(feature_path2,'r')['images']
+	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/categories+resnet152+c3dfc7New_mgru1248_attention_dw2v512_outputdim512/lr0.0001_f40_B128/model/E4_L3.41491039275.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
-		feature_shape=feature_shape,lr=lr,
-		batch_size=128,total_epoch=20,
+	main(hf1,hf2,f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
+		feature_shape1=feature_shape1, feature_shape2=feature_shape2, lr=lr,
+		batch_size=batch_size,total_epoch=total_epoch,
 		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 

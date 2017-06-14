@@ -4,7 +4,7 @@ import h5py
 import math
 
 from utils import MsrDataUtil
-from model import mGRUCaptionModel 
+from model import HierarchicalModel 
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
@@ -93,12 +93,11 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = mGRUCaptionModel.mGRUAttentionCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8])
+	attentionCaptionModel = HierarchicalModel.HierarchicalAttentionCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim)
 	predict_score, predict_words, loss_mask = attentionCaptionModel.build_model()
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 
 	loss = tf.reduce_sum(loss,reduction_indices=[-1])/tf.reduce_sum(loss_mask,reduction_indices=[-1])
-
 
 	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
@@ -187,7 +186,7 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'sparse_mgru1248_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'sparse_hierarchical_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
 	feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
