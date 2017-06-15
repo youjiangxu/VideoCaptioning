@@ -829,10 +829,10 @@ class mLSTMFinalBeamsearchCaptionModel(object):
 
 			h,c = step(x_t,h_tm1,c_tm1)
 
-			tiled_mask_t = tf.tile(mask_t, tf.stack([1, h.get_shape().as_list()[1]]))
+			# tiled_mask_t = tf.tile(mask_t, tf.stack([1, h.get_shape().as_list()[1]]))
 
-			h = tf.where(tiled_mask_t, h, h_tm1) # (batch_size, output_dims)
-			c = tf.where(tiled_mask_t, c, c_tm1)
+			# h = tf.where(tiled_mask_t, h, h_tm1) # (batch_size, output_dims)
+			# c = tf.where(tiled_mask_t, c, c_tm1)
 
 			train_hidden_state_h = train_hidden_state_h.write(time, h)
 			train_hidden_state_c = train_hidden_state_c.write(time, c)
@@ -1048,26 +1048,30 @@ class mLSTMFinalBeamsearchCaptionModel(object):
 			# logprobs = tf.log(tf.nn.softmax(predict_score_t))
 			logprobs = tf.reshape(logprobs, [1, self.beam_size, self.voc_size])
 
+			# logprobs, indices = tf.nn.top_k(logprobs, self.beam_size, sorted=False)  # logprobs-->  [batch_size==1 , beam_size , beam_size]
+			# logprobs = logprobs+tf.expand_dims(past_logprobs, 2)
+			# past_logprobs, topk_indices = tf.nn.top_k(
+			#     tf.reshape(logprobs, [1, self.beam_size * self.beam_size]),
+			#     self.beam_size, 
+			#     sorted=False
+			# )       
+			# indices = tf.gather(tf.reshape(indices,[-1,1]),tf.reshape(topk_indices,[-1]))
+			# symbols = indices % self.voc_size
+			# symbols = tf.reshape(symbols, [1,self.beam_size])
+			# parent_refs = topk_indices // self.beam_size
 
-			logprobs, indices = tf.nn.top_k(logprobs, self.beam_size, sorted=False)  # logprobs-->  [batch_size==1 , beam_size , beam_size]
-			
-			
 			logprobs = logprobs+tf.expand_dims(past_logprobs, 2)
-
-			
 			past_logprobs, topk_indices = tf.nn.top_k(
-			    tf.reshape(logprobs, [1, self.beam_size * self.beam_size]),
+			    tf.reshape(logprobs, [1, self.beam_size * self.voc_size]),
 			    self.beam_size, 
 			    sorted=False
 			)       
-			indices = tf.gather(tf.reshape(indices,[-1,1]),tf.reshape(topk_indices,[-1]))
 
-			# For continuing to the next symbols
-			symbols = indices % self.voc_size
+			symbols = topk_indices % self.voc_size
 			symbols = tf.reshape(symbols, [1,self.beam_size])
+			parent_refs = topk_indices // self.voc_size
 
 
-			parent_refs = topk_indices // self.beam_size
 			h = tf.gather(h,  tf.reshape(parent_refs,[-1]))
 			c = tf.gather(c,  tf.reshape(parent_refs,[-1]))
 			past_symbols_batch_major = tf.reshape(past_symbols[:,:,0:time], [-1, time])
@@ -1090,7 +1094,10 @@ class mLSTMFinalBeamsearchCaptionModel(object):
 			
 			done_past_symbols = tf.gather(tf.reshape(past_symbols,[self.beam_size,self.max_len]),done_indice_max)
 			
-			cond2 = tf.greater(logprobs_done_max,logprobs_finished_beams)
+			# cond2 = tf.greater(logprobs_done_max,logprobs_finished_beams)
+			logprobs_done_max = tf.div(-logprobs_done_max,tf.cast(time,tf.float32))
+			cond2 = tf.greater(logprobs_finished_beams,logprobs_done_max)
+
 			cond3 = tf.equal(done_past_symbols[:,time],self.done_token)
 			cond4 = tf.equal(time,self.max_len-1)
 
@@ -1113,7 +1120,7 @@ class mLSTMFinalBeamsearchCaptionModel(object):
 		# past_symbols = tf.zeros((self.batch_size, self.beam_size, self.max_len), dtype=tf.int32)
 
 		finished_beams = tf.zeros((self.batch_size, self.max_len), dtype=tf.int32)
-		logprobs_finished_beams = tf.ones((self.batch_size,), dtype=tf.float32) * -float('inf')
+		logprobs_finished_beams = tf.ones((self.batch_size,), dtype=tf.float32) * float('inf')
 
 		x_0 = captions[:,0]
 		x_0 = tf.expand_dims(x_0,dim=-1)
@@ -1159,3 +1166,6 @@ class mLSTMFinalBeamsearchCaptionModel(object):
 		predict_score, predict_words , loss_mask= self.decoder(last_h, last_c)
 		finished_beam, logprobs_finished_beams, past_symbols = self.beamSearchDecoder(last_h, last_c)
 		return predict_score, predict_words, loss_mask, finished_beam, logprobs_finished_beams, past_symbols
+
+
+
