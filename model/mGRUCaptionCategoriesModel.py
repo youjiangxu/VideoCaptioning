@@ -455,6 +455,8 @@ class mGRUCategoriesAttentionCaptionModel(object):
 		return predict_score, predict_words, loss_mask
 
 
+
+
 class mGRUCategoriesAttentionBeamsearchCaptionModel(object):
 	'''
 		caption model for ablation studying
@@ -1725,3 +1727,84 @@ class mGRUCategoriesAudioAttentionBeamsearchCaptionModel(object):
 		predict_score, predict_words , loss_mask= self.decoder(last_output)
 		finished_beam, logprobs_finished_beams, past_symbols = self.beamSearchDecoder(last_output)
 		return predict_score, predict_words, loss_mask, finished_beam, logprobs_finished_beams, past_symbols
+
+
+
+
+class mGRUFinalModel(mGRUCategoriesAttentionCaptionModel):
+	'''
+		caption model for ablation studying
+	'''
+	def __init__(self, input_feature1, input_feature2, input_captions, input_categories, voc_size, d_w2v, output_dim, 
+		num_categories = 20, T_k=[1,3,6], attention_dim = 100, dropout=0.5,
+		inner_activation='hard_sigmoid',activation='tanh',
+		return_sequences=True):
+		self.input_categories = input_categories
+		self.num_categories = num_categories
+		self.cate_matrix = self.init_categories_matrix(input_feature1.get_shape().as_list()[-1])
+		self.input_categories_feature = tf.gather(self.cate_matrix,tf.tile(input_categories,[1,input_feature1.get_shape().as_list()[1]]))
+
+		self.input_feature = tf.concat([input_feature1,input_feature2,self.input_categories_feature],-1)
+		print('input_feature.shape(),', self.input_feature.get_shape().as_list())
+		self.input_captions = input_captions
+
+		
+
+		self.voc_size = voc_size
+		self.d_w2v = d_w2v
+		self.output_dim = output_dim
+
+		self.T_k = T_k
+		self.dropout = dropout
+
+		self.inner_activation = inner_activation
+		self.activation = activation
+		self.return_sequences = return_sequences
+		self.attention_dim = attention_dim
+
+		self.encoder_input_shape = self.input_feature.get_shape().as_list()
+		self.decoder_input_shape = self.input_captions.get_shape().as_list()
+
+
+
+class mGRUBeamsearchFinalModel(mGRUCategoriesAttentionBeamsearchCaptionModel):
+	'''
+		caption model for ablation studying
+	'''
+	def __init__(self, input_feature1, input_feature2, input_captions, input_categories, voc_size, d_w2v, output_dim, 
+		done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5, 
+		num_categories = 20, T_k=[1,3,6], attention_dim = 100, dropout=0.5,
+		inner_activation='hard_sigmoid',activation='tanh',
+		return_sequences=True):
+
+		self.input_categories = input_categories
+		self.num_categories = num_categories
+		self.cate_matrix = self.init_categories_matrix(input_feature1.get_shape().as_list()[-1])
+		self.input_categories_feature = tf.gather(self.cate_matrix,tf.tile(input_categories,[1,input_feature1.get_shape().as_list()[1]]))
+
+		self.input_feature = tf.concat([input_feature1,input_feature2,self.input_categories_feature],-1)
+		print('input_feature.shape(),', self.input_feature.get_shape().as_list())
+		self.input_captions = input_captions
+
+		self.voc_size = voc_size
+		self.d_w2v = d_w2v
+		self.output_dim = output_dim
+
+		self.T_k = T_k
+		self.dropout = dropout
+
+		self.beam_size = beam_size
+
+		assert(beamsearch_batchsize==1)
+		self.batch_size = beamsearch_batchsize
+		self.done_token = done_token
+		self.max_len = max_len
+
+
+		self.inner_activation = inner_activation
+		self.activation = activation
+		self.return_sequences = return_sequences
+		self.attention_dim = attention_dim
+
+		self.encoder_input_shape = self.input_feature.get_shape().as_list()
+		self.decoder_input_shape = self.input_captions.get_shape().as_list()

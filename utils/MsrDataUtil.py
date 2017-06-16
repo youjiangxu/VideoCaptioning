@@ -293,6 +293,10 @@ def getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=16):
 			if len(sen)+1<capl:
 				input_captions[idx][len(sen)+1] = v2i['EOS']
 	return input_captions, labels
+
+
+
+
 def getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=16):
 	batch_size = len(batch_caption)
 	labels = np.zeros((batch_size,capl),dtype='int32')
