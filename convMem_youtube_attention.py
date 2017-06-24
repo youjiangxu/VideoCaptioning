@@ -4,9 +4,10 @@ import h5py
 import math
 
 from utils import SeqVladDataUtil
+from utils import DataUtil
 from model import SeqVladModel 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -64,16 +65,41 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 
 	return js
 
+def beamsearch_exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
+	predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, capl=16):
+	
+	caption_output = []
+	total_data = len(data)
+	num_batch = int(round(total_data*1.0/batch_size))
+
+	for batch_idx in xrange(num_batch):
+		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
+		
+		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
+		[fb, lfb, ps] = sess.run([finished_beam, logprobs_finished_beams, past_symbols],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
+
+		generated_captions = SeqVladDataUtil.convertCaptionI2V(batch_caption, fb, i2v)
+
+		for idx, sen in enumerate(generated_captions):
+			print('%s : %s' %(batch_caption[idx].keys()[0],sen))
+			caption_output.append({'image_id':batch_caption[idx].keys()[0],'caption':sen})
+	
+	js = {}
+	js['val_predictions'] = caption_output
+
+	return js
 
 def evaluate_mode_by_shell(res_path,js):
 	with open(res_path, 'w') as f:
 		json.dump(js, f)
 
-	command ='/home/xyj/usr/local/tools/caption/caption_eval/msrvtt_eval.sh '+ res_path
+	command ='/home/xyj/usr/local/tools/caption/caption_eval/call_python_caption_eval.sh '+ res_path
 	os.system(command)
 
 
-def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
+def main(hf,f_type,
+		memory_size = 32, kernel_size=1, capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
 		batch_size=64,total_epoch=100,
 		file=None,pretrained_model=None):
@@ -82,7 +108,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	'''
 
 	# Create vocabulary
-	v2i, train_data, val_data, test_data = SeqVladDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	v2i, train_data, val_data, test_data = DataUtil.create_vocabulary_word2vec(file, capl=capl,  v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
 
 	i2v = {i:v for v,i in v2i.items()}
 
@@ -93,8 +119,11 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.AttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim)
-	predict_score, predict_words, loss_mask = attentionCaptionModel.build_model()
+	attentionCaptionModel = SeqVladModel.ConvMemoryAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+								memory_size=memory_size, mem_ker_size=3, 
+								filter_height=kernel_size, filter_width=kernel_size,
+								done_token=3, max_len = capl, beamsearch_batchsize = 1, beam_size=5)
+	predict_score, predict_words, loss_mask, finished_beam, logprobs_finished_beams, past_symbols = attentionCaptionModel.build_model()
 	loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 
 	loss = tf.reduce_sum(loss,reduction_indices=[-1])/tf.reduce_sum(loss_mask,reduction_indices=[-1])
@@ -140,15 +169,20 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 
 			print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
+			# tic = time.time()
+			# js = exe_test(sess, test_data, batch_size, v2i, i2v, hf, feature_shape, 
+			# 							predict_words, input_video, input_captions, y, capl=capl)
+			# print('    --Val--, .......Time:%.3f' %(time.time()-tic))
+
+
+			# #do beamsearch
 			tic = time.time()
-			js = exe_test(sess, test_data, batch_size, v2i, i2v, hf, feature_shape, 
-										predict_words, input_video, input_captions, y, capl=capl)
+			js = beamsearch_exe_test(sess, test_data, 1, v2i, i2v, hf, feature_shape, 
+										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, capl=capl)
 			print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
-			
-
 			#save model
-			export_path = '/home/xyj/usr/local/saved_model/msrvtt2017/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
+			export_path = '/home/xyj/usr/local/saved_model/youtube/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
 			if not os.path.exists(export_path+'/model'):
 				os.makedirs(export_path+'/model')
 				print('mkdir %s' %export_path+'/model')
@@ -157,7 +191,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 				print('mkdir %s' %export_path+'/res')
 
 			# eval
-			res_path = export_path+'/res/'+f_type+'_E'+str(epoch+1)+'.json'
+			res_path = export_path+'/res/E'+str(epoch+1)+'.json'
 			evaluate_mode_by_shell(res_path,js)
 
 
@@ -173,31 +207,35 @@ if __name__ == '__main__':
 	d_w2v = 512
 	output_dim = 512
 
-	
+	epoch = 10
+
+	kernel_size = 1
+	memory_size = 256
 	'''
 	---------------------------------
 	'''
-	video_feature_dims = 2048
-	timesteps_v = 40 # sequences length for video
+	video_feature_dims = 1024
+	timesteps_v = 20 # sequences length for video
 	height = 7
 	width = 7
 	feature_shape = (timesteps_v,video_feature_dims,height,width)
 
-	f_type = 'seqvlad_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'convmem_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_m'+str(memory_size)
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
-	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152-res5c-40fpv.h5'
-	feature_path = '/data/xyj/resnet152-res5c-40fpv.h5'
+	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
+	feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
 	'''
 	---------------------------------
 	'''
 	hf = h5py.File(feature_path,'r')
 
-	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_mgru_attention_resnet152/lr0.0002_f40/model/E25_L0.736578735637.ckpt'
+	# pretrained_model = '/home/xyj/usr/local/saved_model/youtube/convmem_attention_google_dw2v512_outputdim512_k1/lr0.0001_f20_B64/model/E10_L1.98359400892.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
+	main(hf,f_type, 
+		memory_size=memory_size, kernel_size=kernel_size, capl=16, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
-		batch_size=64,total_epoch=20,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
+		batch_size=64,total_epoch=epoch,
+		file='./data',pretrained_model=None)
 	
 
 	

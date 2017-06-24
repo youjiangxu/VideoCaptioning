@@ -37,7 +37,7 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 	def generate_test_data():
 		captions = []
 		
-		for idx in xrange(1300,1971):
+		for idx in xrange(1301,1971):
 			cap = {}
 			cap['vid'+str(idx)] = ['']
 			captions.append(cap)
@@ -80,32 +80,32 @@ def getBatchVideoFeature(batch_caption, hf, feature_shape):
 	return input_video
 
 
-def getBatchStepVideoFeature(batch_caption, hf, feature_shape):
-	batch_size = len(batch_caption)
-	feature_shape = (40,1024)
-	step = np.random.randint(1,5)
-	# print(step)
-	input_video = np.zeros((batch_size,)+tuple((10,1024)),dtype='float32')
+# def getBatchStepVideoFeature(batch_caption, hf, feature_shape):
+# 	batch_size = len(batch_caption)
+# 	feature_shape = (40,1024)
+# 	step = np.random.randint(1,5)
+# 	# print(step)
+# 	input_video = np.zeros((batch_size,)+tuple((10,1024)),dtype='float32')
 
-	for idx, caption in enumerate(batch_caption):
-		for k,v in caption.items():
-			feature = hf[k]
-			input_video[idx] = np.reshape(feature,feature_shape)[0::step][0:10]
-	return input_video
+# 	for idx, caption in enumerate(batch_caption):
+# 		for k,v in caption.items():
+# 			feature = hf[k]
+# 			input_video[idx] = np.reshape(feature,feature_shape)[0::step][0:10]
+# 	return input_video
 
-def getBatchBidirectVideoFeature(batch_caption, hf, feature_shape):
-	batch_size = len(batch_caption)
-	input_video = np.zeros((batch_size,)+tuple(feature_shape),dtype='float32')
+# def getBatchBidirectVideoFeature(batch_caption, hf, feature_shape):
+# 	batch_size = len(batch_caption)
+# 	input_video = np.zeros((batch_size,)+tuple(feature_shape),dtype='float32')
 
-	for idx, caption in enumerate(batch_caption):
-		for k,v in caption.items():
-			feature = hf[k]
-			flag = np.random.randint(0,2)
-			if flag==0:
-				input_video[idx] = np.reshape(feature,feature_shape)
-			else:
-				input_video[idx] = np.reshape(feature,feature_shape)[::-1]
-	return input_video
+# 	for idx, caption in enumerate(batch_caption):
+# 		for k,v in caption.items():
+# 			feature = hf[k]
+# 			flag = np.random.randint(0,2)
+# 			if flag==0:
+# 				input_video[idx] = np.reshape(feature,feature_shape)
+# 			else:
+# 				input_video[idx] = np.reshape(feature,feature_shape)[::-1]
+# 	return input_video
 
 def getBatchTrainCaption(batch_caption, v2i, capl=16):
 	batch_size = len(batch_caption)

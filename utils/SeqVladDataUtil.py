@@ -134,7 +134,7 @@ def getBatchVideoFeature(batch_caption, hf, feature_shape):
 	for idx, caption in enumerate(batch_caption):
 		for k,v in caption.items():
 			feature = hf[k]
-			input_video[idx] = feature
+			input_video[idx] = np.reshape(feature,feature_shape)
 	return input_video
 
 def getBatchC3DVideoFeature(batch_caption, hf, feature_shape):
