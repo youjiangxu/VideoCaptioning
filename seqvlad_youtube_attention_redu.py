@@ -8,18 +8,18 @@ from utils import DataUtil
 from model import SeqVladModel 
 from utils import CenterUtil
 
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+# os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import tensorflow as tf
 import cPickle as pickle
 import time
 import json
 
-
+import argparse
 		
 def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape, 
-	train, loss, input_video, input_captions, y, merged, train_writer, capl=16):
-
+	train, loss, input_video, input_captions, y, merged, train_writer, 
+	bidirectional=False, step=False, capl=16):
 	np.random.shuffle(data)
 
 	total_data = len(data)
@@ -30,12 +30,17 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		tic = time.time()
-		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-
-		flag = np.random.randint(0,2)
-		if flag==1:
-			data_v = data_v[:,::-1]
-
+		
+		if step:
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+			interval = np.random.randint(1,5)
+			data_v = data_v[:,0::interval][:,0:10]
+		else:
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		if bidirectional:
+			flag = np.random.randint(0,2)
+			if flag==1:
+				data_v = data_v[:,::-1]
 		data_c, data_y = SeqVladDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		data_time = time.time()-tic
 		tic = time.time()
@@ -52,7 +57,7 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 	return total_loss
 
 def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
-	predict_words, input_video, input_captions, y, capl=16):
+	predict_words, input_video, input_captions, y, step=False, capl=16):
 	
 	caption_output = []
 	total_data = len(data)
@@ -60,8 +65,11 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
-		
-		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		if step:
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+			data_v = data_v[:,0::4]
+		else:
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
@@ -77,7 +85,7 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	return js
 
 def beamsearch_exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
-	predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, capl=16):
+	predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, step=False, capl=16):
 	
 	caption_output = []
 	total_data = len(data)
@@ -86,7 +94,11 @@ def beamsearch_exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
-		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		if step:
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+			data_v = data_v[:,0::4]
+		else:
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		[fb, lfb, ps] = sess.run([finished_beam, logprobs_finished_beams, past_symbols],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
@@ -110,6 +122,10 @@ def evaluate_mode_by_shell(res_path,js):
 
 
 def main(hf,f_type,
+		step=False,
+		bidirectional=False,
+		reduction_dim=512,
+		activation = 'tanh',
 		centers_num = 32, kernel_size=1, capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
 		batch_size=64,total_epoch=100,
@@ -123,10 +139,7 @@ def main(hf,f_type,
 
 	i2v = {i:v for v,i in v2i.items()}
 
-	(init_w,init_b,init_centers) = CenterUtil.get_centers('/home/xyj/usr/local/centers/youtube_centers_k'+str(centers_num)+'.pkl', hf, 1024, centers_num)
-	print('init_w mean:', np.mean(init_w), ' std:', np.std(init_w))
-	print('init_b mean:', np.mean(init_b), ' std:', np.std(init_b))
-	print('init_centers mean:', np.mean(init_centers), ' std:', np.std(init_centers))
+
 
 	print('building model ...')
 	voc_size = len(v2i)
@@ -135,8 +148,9 @@ def main(hf,f_type,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.SeqVladAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
-								init_w, init_b, init_centers,
+	attentionCaptionModel = SeqVladModel.SeqVladWithReductionAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+								reduction_dim=reduction_dim,
+								activation=activation,
 								centers_num=centers_num, 
 								filter_size=kernel_size,
 								done_token=3, max_len = capl, beamsearch_batchsize = 1, beam_size=5)
@@ -163,7 +177,7 @@ def main(hf,f_type,
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.5
+	config.gpu_options.per_process_gpu_memory_fraction = 0.6
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -182,10 +196,9 @@ def main(hf,f_type,
 		os.makedirs(export_path+'/log')
 		print('mkdir %s' %export_path+'/log')
 
+	print('building writer')
 	train_writer = tf.summary.FileWriter(export_path + '/log',
                                       sess.graph)
-
-
 	with sess.as_default():
 		saver = tf.train.Saver(sharded=True,max_to_keep=total_epoch)
 		if pretrained_model is not None:
@@ -197,20 +210,22 @@ def main(hf,f_type,
 			print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
 			# # train phase
 			tic = time.time()
-			total_loss = exe_train(sess, train_data, epoch, batch_size, v2i, hf, feature_shape, train, loss, input_video, input_captions, y, merged, train_writer, capl=capl)
+			total_loss = exe_train(sess, train_data, epoch, batch_size, v2i, hf, feature_shape, train, loss, input_video, input_captions, y, 
+				merged, train_writer, bidirectional=bidirectional, step=step, capl=capl)
 
 			print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
 			# tic = time.time()
 			# js = exe_test(sess, test_data, batch_size, v2i, i2v, hf, feature_shape, 
-			# 							predict_words, input_video, input_captions, y, capl=capl)
+			# 							predict_words, input_video, input_captions, y, step=step, capl=capl)
 			# print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
 
 			# #do beamsearch
 			tic = time.time()
 			js = beamsearch_exe_test(sess, test_data, 1, v2i, i2v, hf, feature_shape, 
-										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, capl=capl)
+										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, step=step, capl=capl)
+
 			print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
 			#save model
@@ -230,21 +245,53 @@ def main(hf,f_type,
 			# save_path = saver.save(sess, export_path+'/model/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
 			# print("Model saved in file: %s" % save_path)
 		
+def parseArguments():
+	parser = argparse.ArgumentParser(description='seqvlad, youtube, video captioning, reduction app')
+	
+	parser.add_argument('--step', action='store_true',
+							help='step training')
+	parser.add_argument('--bidirectional', action='store_true',
+							help='bidirectional training')
+
+	parser.add_argument('--gpu_id', type=str, default="0",
+							help='specify gpu id')
+
+	parser.add_argument('--lr', type=float, default=0.0001,
+							help='learning reate')
+	parser.add_argument('--epoch', type=int, default=20,
+							help='total runing epoch')
+	parser.add_argument('--d_w2v', type=int, default=512,
+							help='the dimension of word 2 vector')
+	parser.add_argument('--output_dim', type=int, default=512,
+							help='the hidden size')
+	parser.add_argument('--centers_num', type=int, default=16,
+							help='the number of centers')
+	parser.add_argument('--reduction_dim', type=int, default=512,
+							help='the reduction dim of input feature, e.g., 1024->512')
+
+	args = parser.parse_args()
+	return args
 
 if __name__ == '__main__':
 
+	args = parseArguments()
+	print(args)
+	os.environ["CUDA_VISIBLE_DEVICES"]=args.gpu_id
+	lr = args.lr
+	epoch = args.epoch
 
-	lr = 0.0001
+	d_w2v = args.d_w2v
+	output_dim = args.output_dim
 
-	d_w2v = 512
-	output_dim = 1024
-
-	epoch = 40
+	reduction_dim=args.reduction_dim
+	centers_num = args.centers_num
+	bidirectional = args.bidirectional
+	step = args.step
 
 	kernel_size = 3
-	centers_num = 16
-
-	capl=16
+	
+	capl = 16
+	activation = 'tanh' ## can be one of 'tanh,softmax,relu,sigmoid'
 	'''
 	---------------------------------
 	'''
@@ -253,10 +300,18 @@ if __name__ == '__main__':
 	height = 7
 	width = 7
 	feature_shape = (timesteps_v,video_feature_dims,height,width)
+	f_type = str(activation)+'_seqvlad_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+	
 
-	f_type = 'tanh_bi_seqvlad_withinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+	if step:
+		timesteps_v = 40
+		f_type = 'step_'+ f_type
+	
+	if bidirectional:
+		f_type = 'bi_'+ f_type
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
+
 	feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
 	'''
 	---------------------------------
@@ -266,6 +321,10 @@ if __name__ == '__main__':
 	# pretrained_model = '/home/xyj/usr/local/saved_model/youtube/seqvlad_withinit_attention_google_dw2v512_outputdim512_k1_c16/lr0.0001_f10_B64/model/E8_L1.93834684881.ckpt'
 	
 	main(hf,f_type, 
+		step=step,
+		bidirectional=bidirectional,
+		reduction_dim=reduction_dim,
+		activation=activation,
 		centers_num=centers_num, kernel_size=kernel_size, capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=epoch,

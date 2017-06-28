@@ -29,7 +29,7 @@ def create_vocabulary_word2vec(file, capl=None, v2i={'': 0, 'UNK':1, 'BOS':2, 'E
 				cap = {}
 				temp = line.strip().split('\t')
 				words = temp[1].split(' ')
-				if len(words)<capl:# and len(words)>=4: 
+				if len(words)<capl:# and len(words)>=8: 
 				# if len(words)<16:
 					cap[temp[0]] = words
 					captions.append(cap)

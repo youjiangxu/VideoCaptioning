@@ -240,9 +240,9 @@ if __name__ == '__main__':
 	epoch = 40
 
 	kernel_size = 3
-	centers_num = 16
-
-	activation = 'relu'
+	centers_num = 32
+	capl = 16
+	activation = 'tanh' ## can be one of 'tanh,softmax,relu,sigmoid'
 	'''
 	---------------------------------
 	'''
@@ -252,7 +252,7 @@ if __name__ == '__main__':
 	width = 7
 	feature_shape = (timesteps_v,video_feature_dims,height,width)
 
-	f_type = str(activation)+'_seqvlad_withoutinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+	f_type = 'filterw3_'+str(activation)+'_seqvlad_withoutinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_capl'+str(capl)
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
 	feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
@@ -265,7 +265,7 @@ if __name__ == '__main__':
 	
 	main(hf,f_type, 
 		activation=activation,
-		centers_num=centers_num, kernel_size=kernel_size, capl=16, d_w2v=d_w2v, output_dim=output_dim,
+		centers_num=centers_num, kernel_size=kernel_size, capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=epoch,
 		file='./data',pretrained_model=None)

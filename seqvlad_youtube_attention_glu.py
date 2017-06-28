@@ -6,7 +6,6 @@ import math
 from utils import SeqVladDataUtil
 from utils import DataUtil
 from model import SeqVladModel 
-from utils import CenterUtil
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
@@ -31,11 +30,6 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		tic = time.time()
 		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-
-		flag = np.random.randint(0,2)
-		if flag==1:
-			data_v = data_v[:,::-1]
-
 		data_c, data_y = SeqVladDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		data_time = time.time()-tic
 		tic = time.time()
@@ -123,10 +117,6 @@ def main(hf,f_type,
 
 	i2v = {i:v for v,i in v2i.items()}
 
-	(init_w,init_b,init_centers) = CenterUtil.get_centers('/home/xyj/usr/local/centers/youtube_centers_k'+str(centers_num)+'.pkl', hf, 1024, centers_num)
-	print('init_w mean:', np.mean(init_w), ' std:', np.std(init_w))
-	print('init_b mean:', np.mean(init_b), ' std:', np.std(init_b))
-	print('init_centers mean:', np.mean(init_centers), ' std:', np.std(init_centers))
 
 	print('building model ...')
 	voc_size = len(v2i)
@@ -135,8 +125,7 @@ def main(hf,f_type,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.SeqVladAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
-								init_w, init_b, init_centers,
+	attentionCaptionModel = SeqVladModel.SeqVladWithGLUAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
 								centers_num=centers_num, 
 								filter_size=kernel_size,
 								done_token=3, max_len = capl, beamsearch_batchsize = 1, beam_size=5)
@@ -163,7 +152,7 @@ def main(hf,f_type,
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.5
+	config.gpu_options.per_process_gpu_memory_fraction = 0.4
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -211,6 +200,7 @@ def main(hf,f_type,
 			tic = time.time()
 			js = beamsearch_exe_test(sess, test_data, 1, v2i, i2v, hf, feature_shape, 
 										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, capl=capl)
+
 			print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
 			#save model
@@ -237,14 +227,13 @@ if __name__ == '__main__':
 	lr = 0.0001
 
 	d_w2v = 512
-	output_dim = 1024
+	output_dim = 512
 
 	epoch = 40
 
 	kernel_size = 3
 	centers_num = 16
 
-	capl=16
 	'''
 	---------------------------------
 	'''
@@ -254,7 +243,7 @@ if __name__ == '__main__':
 	width = 7
 	feature_shape = (timesteps_v,video_feature_dims,height,width)
 
-	f_type = 'tanh_bi_seqvlad_withinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+	f_type = 'glu_seqvlad_withoutinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
 	feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
@@ -266,7 +255,7 @@ if __name__ == '__main__':
 	# pretrained_model = '/home/xyj/usr/local/saved_model/youtube/seqvlad_withinit_attention_google_dw2v512_outputdim512_k1_c16/lr0.0001_f10_B64/model/E8_L1.93834684881.ckpt'
 	
 	main(hf,f_type, 
-		centers_num=centers_num, kernel_size=kernel_size, capl=capl, d_w2v=d_w2v, output_dim=output_dim,
+		centers_num=centers_num, kernel_size=kernel_size, capl=16, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=epoch,
 		file='./data',pretrained_model=None)

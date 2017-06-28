@@ -15,7 +15,7 @@ import cPickle as pickle
 import time
 import json
 
-
+import argparse
 		
 def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape, 
 	train, loss, input_video, input_captions, y, merged, train_writer, capl=16):
@@ -30,12 +30,11 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		tic = time.time()
-		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-
-		flag = np.random.randint(0,2)
-		if flag==1:
-			data_v = data_v[:,::-1]
-
+		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+		start = np.random.randint(0,4)
+		data_v = data_v[:,start::4]
+		if np.random.randint(0,2)==1:
+			data_v=data_v[:,::-1]
 		data_c, data_y = SeqVladDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		data_time = time.time()-tic
 		tic = time.time()
@@ -61,7 +60,8 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
-		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+		data_v = data_v[:,0::4]
 		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
@@ -86,7 +86,8 @@ def beamsearch_exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
-		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+		data_v = data_v[:,0::4]
 		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		[fb, lfb, ps] = sess.run([finished_beam, logprobs_finished_beams, past_symbols],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
@@ -110,7 +111,8 @@ def evaluate_mode_by_shell(res_path,js):
 
 
 def main(hf,f_type,
-		centers_num = 32, kernel_size=1, capl=16, d_w2v=512, output_dim=512,
+		activation = 'tanh',
+		centers_num = 16, kernel_size=1, capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
 		batch_size=64,total_epoch=100,
 		file=None,pretrained_model=None):
@@ -137,6 +139,7 @@ def main(hf,f_type,
 
 	attentionCaptionModel = SeqVladModel.SeqVladAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
 								init_w, init_b, init_centers,
+								activation=activation,
 								centers_num=centers_num, 
 								filter_size=kernel_size,
 								done_token=3, max_len = capl, beamsearch_batchsize = 1, beam_size=5)
@@ -163,7 +166,7 @@ def main(hf,f_type,
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.5
+	config.gpu_options.per_process_gpu_memory_fraction = 0.4
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -211,6 +214,7 @@ def main(hf,f_type,
 			tic = time.time()
 			js = beamsearch_exe_test(sess, test_data, 1, v2i, i2v, hf, feature_shape, 
 										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, capl=capl)
+
 			print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
 			#save model
@@ -229,22 +233,42 @@ def main(hf,f_type,
 
 			# save_path = saver.save(sess, export_path+'/model/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
 			# print("Model saved in file: %s" % save_path)
-		
+
+
+def parseArguments():
+	parser = argparse.ArgumentParser(description='seqvlad, youtube, video captioning, reduction app')
+	
+
+	parser.add_argument('--lr', type=float, default=0.0001,
+							help='learning reate')
+	parser.add_argument('--epoch', type=int, default=20,
+							help='total runing epoch')
+	parser.add_argument('--d_w2v', type=int, default=512,
+							help='the dimension of word 2 vector')
+	parser.add_argument('--output_dim', type=int, default=512,
+							help='the hidden size')
+	parser.add_argument('--centers_num', type=int, default=16,
+							help='the number of centers')
+	
+	args = parser.parse_args()
+	return args
+
 
 if __name__ == '__main__':
 
+	args = parseArguments()
+	lr = args.lr
 
-	lr = 0.0001
+	d_w2v = args.d_w2v
+	output_dim = args.output_dim
 
-	d_w2v = 512
-	output_dim = 1024
-
-	epoch = 40
+	epoch = args.epoch
 
 	kernel_size = 3
-	centers_num = 16
+	centers_num = args.centers_num
 
-	capl=16
+	capl = 16
+	activation = 'tanh' ## can be one of 'tanh,softmax,relu,sigmoid'
 	'''
 	---------------------------------
 	'''
@@ -254,10 +278,10 @@ if __name__ == '__main__':
 	width = 7
 	feature_shape = (timesteps_v,video_feature_dims,height,width)
 
-	f_type = 'tanh_bi_seqvlad_withinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+	f_type = 'bi_step_'+str(activation)+'_seqvlad_withoutinit_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
-	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
-	feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
+	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-40fpv.h5'
+	feature_path = '/data/xyj/in5b-40fpv.h5'
 	'''
 	---------------------------------
 	'''
@@ -266,6 +290,7 @@ if __name__ == '__main__':
 	# pretrained_model = '/home/xyj/usr/local/saved_model/youtube/seqvlad_withinit_attention_google_dw2v512_outputdim512_k1_c16/lr0.0001_f10_B64/model/E8_L1.93834684881.ckpt'
 	
 	main(hf,f_type, 
+		activation=activation,
 		centers_num=centers_num, kernel_size=kernel_size, capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=epoch,
