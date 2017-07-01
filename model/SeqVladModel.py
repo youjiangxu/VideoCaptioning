@@ -1323,8 +1323,8 @@ class NetVladAttentionModel(object):
 		caption model for ablation studying
 		output_dim = num_of_filter
 	'''
-	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, 
-		init_w, init_b, init_centers,
+	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim,
+		reduction_dim=512, 
 		centers_num=16,
 		filter_size=1, stride=[1,1,1,1], pad='SAME', 
 		done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5,
@@ -1345,9 +1345,11 @@ class NetVladAttentionModel(object):
 		self.pad = pad
 
 		self.centers_num = centers_num
-		self.init_w = init_w
-		self.init_b = init_b
-		self.init_centers = init_centers
+
+		self.reduction_dim = reduction_dim
+		# self.init_w = init_w
+		# self.init_b = init_b
+		# self.init_centers = init_centers
 
 		self.beam_size = beam_size
 
@@ -1371,26 +1373,27 @@ class NetVladAttentionModel(object):
 	def init_parameters(self):
 		print('init_parameters ...')
 
+
+		self.redu_W = tf.get_variable("redu_W", shape=[3, 3, self.enc_in_shape[-1], self.reduction_dim], 
+										initializer=tf.contrib.layers.xavier_initializer())
+		self.redu_b = tf.get_variable("redu_b",initializer=tf.random_normal([self.reduction_dim],stddev=1./math.sqrt(self.reduction_dim)))
+
 		
-		self.init_centers = tf.cast(tf.reshape(tf.transpose(self.init_centers,perm=[1,0]),[-1, self.enc_in_shape[-1], self.centers_num]),tf.float32)
-		self.centers = tf.Variable(self.init_centers,dtype=tf.float32, name='centers')
 
-		encoder_i2h_shape = [self.filter_size, self.filter_size, self.enc_in_shape[-1], self.centers_num]		
-		self.init_w = tf.cast(tf.reshape(tf.transpose(self.init_w,perm=[1,0]),encoder_i2h_shape),tf.float32)
-
-		self.W_e = tf.Variable(self.init_w,dtype=tf.float32, name='W_e')
-		self.b_e = tf.Variable(tf.cast(self.init_b,tf.float32),dtype=tf.float32, name='b_e')
-
-		tf.summary.histogram('centers',self.centers)
-		tf.summary.histogram('W_e',self.W_e)
-		tf.summary.histogram('b_e',self.b_e)
-
-
-		self.liner_W = tf.get_variable("liner_W",[self.enc_in_shape[-1], self.output_dim],
+		self.W_e = tf.get_variable("W_e", shape=[3, 3, self.reduction_dim, self.centers_num], initializer=tf.contrib.layers.xavier_initializer())
+		self.b_e = tf.get_variable("b_e",initializer=tf.random_normal([self.centers_num],stddev=1./math.sqrt(self.centers_num)))
+		self.centers = tf.get_variable("centers",[1, 1, 1, self.reduction_dim, self.centers_num],
 			initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
 
-		self.liner_b = tf.get_variable("liner_b",initializer=tf.random_normal([self.output_dim],stddev=1./math.sqrt(self.output_dim)))
 
+
+
+		if self.output_dim!=self.enc_in_shape[-1]:
+			print('the dimension of input feature != hidden size')
+			self.liner_W = tf.get_variable("liner_W",[self.enc_in_shape[-1], self.output_dim],
+				initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
+
+			self.liner_b = tf.get_variable("liner_b",initializer=tf.random_normal([self.output_dim],stddev=1./math.sqrt(self.output_dim)))
 		# decoder parameters
 		self.T_w2v, self.T_mask = self.init_embedding_matrix()
 
@@ -1408,16 +1411,16 @@ class NetVladAttentionModel(object):
 		
 
 		
-		self.W_a = tf.get_variable("W_a",[self.enc_in_shape[-1]*self.centers_num,self.attention_dim],
-			initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.enc_in_shape[-1]*self.centers_num)))
+		self.W_a = tf.get_variable("W_a",[self.reduction_dim*self.centers_num,self.attention_dim],
+			initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.reduction_dim*self.centers_num)))
 
 		self.U_a = tf.get_variable("U_a",[self.output_dim,self.attention_dim],initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
 		self.b_a = tf.get_variable("b_a",initializer = tf.random_normal([self.attention_dim],stddev=1. / math.sqrt(self.attention_dim)))
 
 		self.W = tf.get_variable("W",(self.attention_dim,1),initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.attention_dim)))
 
-		self.A = tf.get_variable("A",(self.enc_in_shape[-1]*self.centers_num,3*self.output_dim),
-			initializer=tf.random_normal_initializer(stddev=1./ math.sqrt(self.enc_in_shape[-1]*self.centers_num)))
+		self.A = tf.get_variable("A",(self.reduction_dim*self.centers_num,3*self.output_dim),
+			initializer=tf.random_normal_initializer(stddev=1./ math.sqrt(self.reduction_dim*self.centers_num)))
 
 		
 
@@ -1427,8 +1430,6 @@ class NetVladAttentionModel(object):
 			initializer=tf.random_normal_initializer(stddev=1 / math.sqrt(self.output_dim)))
 		self.b_c = tf.get_variable("b_c",initializer = tf.random_normal([self.voc_size],stddev=1./math.sqrt(self.voc_size)))
 
-		tf.summary.histogram('W_c',self.W_c)
-		tf.summary.histogram('b_c',self.b_c)
 
 
 	def init_embedding_matrix(self):
@@ -1453,9 +1454,17 @@ class NetVladAttentionModel(object):
 	def encoder(self):
 		
 		timesteps = self.enc_in_shape[1]
-		embedded_feature = self.input_feature
+
+		input_feature = self.input_feature
+		input_feature = tf.reshape(input_feature,[-1,self.enc_in_shape[2],self.enc_in_shape[3],self.enc_in_shape[4]])
+		input_feature = tf.add(tf.nn.conv2d(input_feature, self.redu_W, self.stride, self.pad, name='reduction_wx'),tf.reshape(self.redu_b,[1, 1, 1, self.reduction_dim]))
+		input_feature = tf.reshape(input_feature,[-1,self.enc_in_shape[1],self.enc_in_shape[2],self.enc_in_shape[3],self.reduction_dim])
+		input_feature = tf.nn.relu(input_feature)
+
+		self.enc_in_shape = input_feature.get_shape().as_list()
+
 		
-		assignment = tf.reshape(embedded_feature,[-1,self.enc_in_shape[2],self.enc_in_shape[3],self.enc_in_shape[4]])
+		assignment = tf.reshape(input_feature,[-1,self.enc_in_shape[2],self.enc_in_shape[3],self.enc_in_shape[4]])
 		assignment = tf.add(tf.nn.conv2d(assignment, self.W_e, self.stride, self.pad, name='w_conv_x'),tf.reshape(self.b_e,[1, 1, 1, self.centers_num]))
 		assignment = tf.reshape(assignment,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.centers_num])
 		assignment = tf.nn.softmax(assignment,dim=-1)
@@ -1467,9 +1476,9 @@ class NetVladAttentionModel(object):
 		# for alpha * x
 		assignment = tf.transpose(assignment,perm=[0,2,1])
 
-		embedded_feature = tf.reshape(embedded_feature,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.enc_in_shape[4]])
+		input_feature = tf.reshape(input_feature,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.enc_in_shape[4]])
 
-		vlad = tf.matmul(assignment,embedded_feature)
+		vlad = tf.matmul(assignment,input_feature)
 		vlad = tf.transpose(vlad, perm=[0,2,1])
 
 		# for differnce
@@ -1480,8 +1489,10 @@ class NetVladAttentionModel(object):
 
 		vlad = tf.reshape(vlad,[-1,self.enc_in_shape[1],self.enc_in_shape[-1]*self.centers_num])
 		vlad = tf.nn.l2_normalize(vlad,2)
-		last_output = tf.nn.xw_plus_b(tf.reduce_mean(self.input_feature,axis=[1,2,3]),self.liner_W, self.liner_b)
-
+		last_output = tf.reduce_mean(self.input_feature,axis=[1,2,3])
+		if self.output_dim!=self.input_feature.get_shape().as_list()[-1]:
+			print('the dimension of input feature != hidden size')
+			last_output = tf.nn.xw_plus_b(last_output,self.liner_W, self.liner_b)
 		return last_output, vlad
 
 	def decoder(self, initial_state, input_feature):
@@ -2392,7 +2403,7 @@ class SeqVladWithGLUAttentionModel(NetVladAttentionModel):
 
 
 
-class SeqVladWithReductionAttentionModel(NetVladAttentionModel):
+class SeqVladWithReduAttentionModel(NetVladAttentionModel):
 	'''
 		caption model for ablation studying
 		output_dim = num_of_filter
@@ -2476,11 +2487,12 @@ class SeqVladWithReductionAttentionModel(NetVladAttentionModel):
 		self.U_e_z = tf.get_variable("U_e_z", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer())
 		self.U_e_h = tf.get_variable("U_e_h", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer()) 
 
+		if self.output_dim!=self.enc_in_shape[-1]:
+			print('the dimension of input feature != hidden size')
+			self.liner_W = tf.get_variable("liner_W",[self.enc_in_shape[-1], self.output_dim],
+				initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
 
-		self.liner_W = tf.get_variable("liner_W",[self.enc_in_shape[-1], self.output_dim],
-			initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
-
-		self.liner_b = tf.get_variable("liner_b",initializer=tf.random_normal([self.output_dim],stddev=1./math.sqrt(self.output_dim)))
+			self.liner_b = tf.get_variable("liner_b",initializer=tf.random_normal([self.output_dim],stddev=1./math.sqrt(self.output_dim)))
 
 		# decoder parameters
 		self.T_w2v, self.T_mask = self.init_embedding_matrix()
@@ -2588,7 +2600,269 @@ class SeqVladWithReductionAttentionModel(NetVladAttentionModel):
 			r = hard_sigmoid(assign_t+ tf.nn.conv2d(h_tm1, self.U_e_r, self.stride, self.pad, name='r'))
 			z = hard_sigmoid(assign_t+ tf.nn.conv2d(h_tm1, self.U_e_z, self.stride, self.pad, name='z'))
 
-			hh = tf.tanh(assign_t+ tf.nn.conv2d(r*h_tm1, self.U_e_h, self.stride, self.pad, name='hh'))
+			hh = tf.tanh(assign_t+ tf.nn.conv2d(r*h_tm1, self.U_e_h, self.stride, self.pad, name='uh_hh'))
+
+			h = (1-z)*hh + z*h_tm1
+			
+			hidden_states = hidden_states.write(time, h)
+
+			return (time+1,hidden_states, h)
+
+		time = tf.constant(0, dtype='int32', name='time')
+		initial_state = get_init_state(input_feature,self.centers_num)
+
+		feature_out = tf.while_loop(
+	            cond=lambda time, *_: time < timesteps,
+	            body=step,
+	            loop_vars=(time, hidden_states, initial_state ),
+	            parallel_iterations=32,
+	            swap_memory=True)
+
+
+		hidden_states = feature_out[-2]
+		if hasattr(hidden_states, 'stack'):
+			assignment = hidden_states.stack()
+		else:
+			assignment = hidden_states.pack()
+
+		
+		
+		axis = [1,0]+list(range(2,5))  # axis = [1,0,2]
+		assignment = tf.transpose(assignment, perm=axis)
+
+
+		assignment = tf.reshape(assignment,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.centers_num])
+
+		# assignment = tf.nn.softmax(assignment,dim=-1)
+
+		# for alpha * c
+		a_sum = tf.reduce_sum(assignment,-2,keep_dims=True)
+		a = tf.multiply(a_sum,self.centers)
+		tf.summary.histogram('a',a)
+		# for alpha * x
+		assignment = tf.transpose(assignment,perm=[0,2,1])
+
+		input_feature = tf.reshape(input_feature,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.reduction_dim])
+
+		vlad = tf.matmul(assignment,input_feature)
+		vlad = tf.transpose(vlad, perm=[0,2,1])
+		tf.summary.histogram('vlad',vlad)
+		# for differnce
+		vlad = tf.subtract(vlad,a)
+
+		vlad = tf.reshape(vlad,[-1,self.enc_in_shape[-1],self.centers_num])
+		vlad = tf.nn.l2_normalize(vlad,1)
+
+		vlad = tf.reshape(vlad,[-1,self.enc_in_shape[1],self.enc_in_shape[-1]*self.centers_num])
+		vlad = tf.nn.l2_normalize(vlad,2)
+		last_output = tf.reduce_mean(self.input_feature,axis=[1,2,3])
+		if self.output_dim!=self.input_feature.get_shape().as_list()[-1]:
+			print('the dimension of input feature != hidden size')
+			last_output = tf.nn.xw_plus_b(last_output,self.liner_W, self.liner_b)
+
+		return last_output, vlad
+
+class SeqVladWithReduNotShareAttentionModel(NetVladAttentionModel):
+	'''
+		caption model for ablation studying
+		output_dim = num_of_filter
+	'''
+	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, 
+		reduction_dim=512,
+		centers_num=16,
+		filter_size=1, stride=[1,1,1,1], pad='SAME', 
+		done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5,
+		attention_dim = 100, dropout=0.5,
+		inner_activation='hard_sigmoid',activation='tanh',
+		return_sequences=True):
+
+		self.reduction_dim=reduction_dim
+		
+
+		
+
+		self.input_feature = tf.transpose(input_feature,perm=[0,1,3,4,2]) # after transpose teh shape should be (batch, timesteps, height, width, channels)
+
+		self.input_captions = input_captions
+
+		self.voc_size = voc_size
+		self.d_w2v = d_w2v
+
+		self.output_dim = output_dim
+		self.filter_size = filter_size
+		self.stride = stride
+		self.pad = pad
+
+		self.centers_num = centers_num
+
+		self.beam_size = beam_size
+
+		assert(beamsearch_batchsize==1)
+		self.batch_size = beamsearch_batchsize
+		self.done_token = done_token
+		self.max_len = max_len
+
+		self.dropout = dropout
+
+
+
+		self.inner_activation = inner_activation
+		self.activation = activation
+		self.return_sequences = return_sequences
+		self.attention_dim = attention_dim
+
+
+
+		self.enc_in_shape = self.input_feature.get_shape().as_list()
+		self.decoder_input_shape = self.input_captions.get_shape().as_list()
+		print('enc_in_shape', self.enc_in_shape)
+
+		print('activation',self.activation)
+	def init_parameters(self):
+		print('init_parameters ...')
+
+		# encoder parameters
+		# print(self.enc_in_shape)
+
+		self.redu_W = tf.get_variable("redu_W", shape=[3, 3, self.enc_in_shape[-1], self.reduction_dim], 
+										initializer=tf.contrib.layers.xavier_initializer())
+		self.redu_b = tf.get_variable("redu_b",initializer=tf.random_normal([self.reduction_dim],stddev=1./math.sqrt(self.reduction_dim)))
+
+		
+		self.W_e = tf.get_variable("W_e", shape=[3, 3, self.reduction_dim, 3*self.centers_num], initializer=tf.contrib.layers.xavier_initializer())
+		self.b_e = tf.get_variable("b_e",initializer=tf.random_normal([3*self.centers_num],stddev=1./math.sqrt(3*self.centers_num)))
+		self.centers = tf.get_variable("centers",[1, 1, 1, self.reduction_dim, self.centers_num],
+			initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
+
+
+
+		tf.summary.histogram('centers',self.centers)
+		tf.summary.histogram('W_e',self.W_e)
+		tf.summary.histogram('b_e',self.b_e)
+
+
+		encoder_h2h_shape = (self.filter_size, self.filter_size, self.centers_num, self.centers_num)
+		self.U_e_r = tf.get_variable("U_e_r", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer())
+		self.U_e_z = tf.get_variable("U_e_z", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer())
+		self.U_e_h = tf.get_variable("U_e_h", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer()) 
+
+		if self.output_dim!=self.enc_in_shape[-1]:
+			print('the dimension of input feature != hidden size')
+			self.liner_W = tf.get_variable("liner_W",[self.enc_in_shape[-1], self.output_dim],
+				initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
+
+			self.liner_b = tf.get_variable("liner_b",initializer=tf.random_normal([self.output_dim],stddev=1./math.sqrt(self.output_dim)))
+
+		# decoder parameters
+		self.T_w2v, self.T_mask = self.init_embedding_matrix()
+
+		decoder_i2h_shape = (self.d_w2v,3*self.output_dim)
+		decoder_h2h_shape = (self.output_dim,self.output_dim)
+
+		self.W_d = tf.get_variable("W_d",decoder_i2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.d_w2v)))
+		self.b_d = tf.get_variable("b_d",initializer = tf.random_normal([3*self.output_dim], stddev=1./math.sqrt(3*self.output_dim)))
+		
+		self.U_d_r = tf.get_variable("U_d_r",decoder_h2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
+		self.U_d_z = tf.get_variable("U_d_z",decoder_h2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
+		self.U_d_h = tf.get_variable("U_d_h",decoder_h2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
+
+		
+		
+
+		
+		self.W_a = tf.get_variable("W_a",[self.reduction_dim*self.centers_num,self.attention_dim],
+			initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.reduction_dim*self.centers_num)))
+
+		self.U_a = tf.get_variable("U_a",[self.output_dim,self.attention_dim],initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
+		self.b_a = tf.get_variable("b_a",initializer = tf.random_normal([self.attention_dim],stddev=1. / math.sqrt(self.attention_dim)))
+
+		self.W = tf.get_variable("W",(self.attention_dim,1),initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.attention_dim)))
+
+		self.A = tf.get_variable("A",(self.reduction_dim*self.centers_num,3*self.output_dim),
+			initializer=tf.random_normal_initializer(stddev=1./ math.sqrt(self.reduction_dim*self.centers_num)))
+
+		
+
+
+		# classification parameters
+		self.W_c = tf.get_variable("W_c",[self.output_dim,self.voc_size],
+			initializer=tf.random_normal_initializer(stddev=1 / math.sqrt(self.output_dim)))
+		self.b_c = tf.get_variable("b_c",initializer = tf.random_normal([self.voc_size],stddev=1./math.sqrt(self.voc_size)))
+
+		tf.summary.histogram('W_c',self.W_c)
+		tf.summary.histogram('b_c',self.b_c)
+
+	def init_embedding_matrix(self):
+		'''init word embedding matrix
+		'''
+		voc_size = self.voc_size
+		d_w2v = self.d_w2v	
+		np_mask = np.vstack((np.zeros(d_w2v),np.ones((voc_size-1,d_w2v))))
+		T_mask = tf.constant(np_mask, tf.float32, name='LUT_mask')
+
+		LUT = np.zeros((voc_size, d_w2v), dtype='float32')
+		for v in range(voc_size):
+			LUT[v] = rng.randn(d_w2v)
+			LUT[v] = LUT[v] / (np.linalg.norm(LUT[v]) + 1e-6)
+
+		# word 0 is blanked out, word 1 is 'UNK'
+		LUT[0] = np.zeros((d_w2v))
+		# setup LUT!
+		T_w2v = tf.Variable(LUT.astype('float32'),trainable=True)
+
+		return T_w2v, T_mask 
+	def encoder(self):
+		
+		timesteps = self.enc_in_shape[1]
+		# # reduction
+		input_feature = self.input_feature
+		input_feature = tf.reshape(input_feature,[-1,self.enc_in_shape[2],self.enc_in_shape[3],self.enc_in_shape[4]])
+		input_feature = tf.add(tf.nn.conv2d(input_feature, self.redu_W, self.stride, self.pad, name='reduction_wx'),tf.reshape(self.redu_b,[1, 1, 1, self.reduction_dim]))
+		input_feature = tf.reshape(input_feature,[-1,self.enc_in_shape[1],self.enc_in_shape[2],self.enc_in_shape[3],self.reduction_dim])
+		input_feature = tf.nn.relu(input_feature)
+
+		self.enc_in_shape = input_feature.get_shape().as_list()
+
+		assignment = tf.reshape(input_feature,[-1,self.enc_in_shape[2],self.enc_in_shape[3],self.reduction_dim])
+		assignment = tf.add(tf.nn.conv2d(assignment, self.W_e, self.stride, self.pad, name='w_conv_x'),tf.reshape(self.b_e,[1, 1, 1, 3*self.centers_num]))
+		
+		assignment = tf.reshape(assignment,[-1,self.enc_in_shape[1],self.enc_in_shape[2],self.enc_in_shape[3],3*self.centers_num])
+
+
+
+		axis = [1,0]+list(range(2,5))  # axis = [1,0,2]
+		assignment = tf.transpose(assignment, perm=axis)
+
+		input_assignment = tf.TensorArray(
+	            dtype=assignment.dtype,
+	            size=timesteps,
+	            tensor_array_name='input_assignment')
+		if hasattr(input_assignment, 'unstack'):
+			input_assignment = input_assignment.unstack(assignment)
+		else:
+			input_assignment = input_assignment.unpack(assignment)	
+
+		hidden_states = tf.TensorArray(
+	            dtype=tf.float32,
+	            size=timesteps,
+	            tensor_array_name='hidden_states')
+
+		def get_init_state(x, output_dims):
+			initial_state = tf.zeros_like(x)
+			initial_state = tf.reduce_sum(initial_state,axis=[1,4])
+			initial_state = tf.expand_dims(initial_state,dim=-1)
+			initial_state = tf.tile(initial_state,[1,1,1,output_dims])
+			return initial_state
+		def step(time, hidden_states, h_tm1):
+			assign_t = input_assignment.read(time) # batch_size * dim
+			assign_t_r = assign_t[:,:,:,0:self.centers_num]
+			assign_t_z = assign_t[:,:,:,self.centers_num:2*self.centers_num]
+			assign_t_h = assign_t[:,:,:,2*self.centers_num::]
+			
+			r = hard_sigmoid(assign_t_r+ tf.nn.conv2d(h_tm1, self.U_e_r, self.stride, self.pad, name='r'))
+			z = hard_sigmoid(assign_t_z+ tf.nn.conv2d(h_tm1, self.U_e_z, self.stride, self.pad, name='z'))
+
+			hh = tf.tanh(assign_t_h+ tf.nn.conv2d(r*h_tm1, self.U_e_h, self.stride, self.pad, name='hh'))
 
 			h = (1-z)*hh + z*h_tm1
 			
@@ -2641,243 +2915,9 @@ class SeqVladWithReductionAttentionModel(NetVladAttentionModel):
 
 		vlad = tf.reshape(vlad,[-1,self.enc_in_shape[1],self.enc_in_shape[-1]*self.centers_num])
 		vlad = tf.nn.l2_normalize(vlad,2)
-		last_output = tf.nn.xw_plus_b(tf.reduce_mean(self.input_feature,axis=[1,2,3]),self.liner_W, self.liner_b)
+		last_output = tf.reduce_mean(self.input_feature,axis=[1,2,3])
+		if self.output_dim!=self.input_feature.get_shape().as_list()[-1]:
+			print('the dimension of input feature != hidden size')
+			last_output = tf.nn.xw_plus_b(last_output,self.liner_W, self.liner_b)
 
 		return last_output, vlad
-
-
-class SeqVladKnowledgeInitAttentionModel(NetVladAttentionModel):
-	'''
-		caption model for ablation studying
-		output_dim = num_of_filter
-	'''
-	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, 
-		
-		centers_num=16,
-		filter_size=1, stride=[1,1,1,1], pad='SAME', 
-		done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5,
-		attention_dim = 100, dropout=0.5,
-		inner_activation='hard_sigmoid',activation='tanh',
-		return_sequences=True):
-
-		self.input_feature = tf.transpose(input_feature,perm=[0,1,3,4,2]) # after transpose teh shape should be (batch, timesteps, height, width, channels)
-
-		self.input_captions = input_captions
-
-		self.voc_size = voc_size
-		self.d_w2v = d_w2v
-
-		self.output_dim = output_dim
-		self.filter_size = filter_size
-		self.stride = stride
-		self.pad = pad
-
-		self.centers_num = centers_num
-		
-		
-
-		self.beam_size = beam_size
-
-		assert(beamsearch_batchsize==1)
-		self.batch_size = beamsearch_batchsize
-		self.done_token = done_token
-		self.max_len = max_len
-
-		self.dropout = dropout
-
-
-
-		self.inner_activation = inner_activation
-		self.activation = activation
-		self.return_sequences = return_sequences
-		self.attention_dim = attention_dim
-
-		self.enc_in_shape = self.input_feature.get_shape().as_list()
-		self.decoder_input_shape = self.input_captions.get_shape().as_list()
-		print('enc_in_shape', self.enc_in_shape)
-	def init_parameters(self):
-		print('init_parameters ...')
-
-		# encoder parameters
-		
-		self.W_e = tf.get_variable("W_e", shape=[1, 1, self.enc_in_shape[-1], self.centers_num], initializer=tf.contrib.layers.xavier_initializer())
-		self.b_e = tf.get_variable("b_e",initializer=tf.random_normal([self.centers_num],stddev=1./math.sqrt(self.centers_num)))
-		self.centers = tf.get_variable("centers",[1, 1, 1, self.enc_in_shape[-1], self.centers_num],
-			initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
-
-		
-
-
-		tf.summary.histogram('centers',self.centers)
-		tf.summary.histogram('W_e',self.W_e)
-		tf.summary.histogram('b_e',self.b_e)
-
-
-		encoder_h2h_shape = (self.filter_size, self.filter_size, self.centers_num, self.centers_num)
-		self.U_e_r = tf.get_variable("U_e_r", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer())
-		self.U_e_z = tf.get_variable("U_e_z", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer())
-		self.U_e_h = tf.get_variable("U_e_h", shape=encoder_h2h_shape, initializer=tf.contrib.layers.xavier_initializer()) 
-
-
-		self.liner_W = tf.get_variable("liner_W",[self.enc_in_shape[-1], self.output_dim],
-			initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.enc_in_shape[-1])))
-
-		self.liner_b = tf.get_variable("liner_b",initializer=tf.random_normal([self.output_dim],stddev=1./math.sqrt(self.output_dim)))
-
-		# decoder parameters
-		self.T_w2v, self.T_mask = self.init_embedding_matrix()
-
-		decoder_i2h_shape = (self.d_w2v,3*self.output_dim)
-		decoder_h2h_shape = (self.output_dim,self.output_dim)
-
-		self.W_d = tf.get_variable("W_d",decoder_i2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.d_w2v)))
-		self.b_d = tf.get_variable("b_d",initializer = tf.random_normal([3*self.output_dim], stddev=1./math.sqrt(3*self.output_dim)))
-		
-		self.U_d_r = tf.get_variable("U_d_r",decoder_h2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
-		self.U_d_z = tf.get_variable("U_d_z",decoder_h2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
-		self.U_d_h = tf.get_variable("U_d_h",decoder_h2h_shape,initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
-
-		
-		
-
-		
-		self.W_a = tf.get_variable("W_a",[self.enc_in_shape[-1]*self.centers_num,self.attention_dim],
-			initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.enc_in_shape[-1]*self.centers_num)))
-
-		self.U_a = tf.get_variable("U_a",[self.output_dim,self.attention_dim],initializer=tf.random_normal_initializer(stddev=1./math.sqrt(self.output_dim)))
-		self.b_a = tf.get_variable("b_a",initializer = tf.random_normal([self.attention_dim],stddev=1. / math.sqrt(self.attention_dim)))
-
-		self.W = tf.get_variable("W",(self.attention_dim,1),initializer=tf.random_normal_initializer(stddev=1. / math.sqrt(self.attention_dim)))
-
-		self.A = tf.get_variable("A",(self.enc_in_shape[-1]*self.centers_num,3*self.output_dim),
-			initializer=tf.random_normal_initializer(stddev=1./ math.sqrt(self.enc_in_shape[-1]*self.centers_num)))
-
-		
-
-
-		# classification parameters
-		self.W_c = tf.get_variable("W_c",[self.output_dim,self.voc_size],
-			initializer=tf.random_normal_initializer(stddev=1 / math.sqrt(self.output_dim)))
-		self.b_c = tf.get_variable("b_c",initializer = tf.random_normal([self.voc_size],stddev=1./math.sqrt(self.voc_size)))
-
-		tf.summary.histogram('W_c',self.W_c)
-		tf.summary.histogram('b_c',self.b_c)
-
-	def init_embedding_matrix(self):
-		'''init word embedding matrix
-		'''
-		voc_size = self.voc_size
-		d_w2v = self.d_w2v	
-		np_mask = np.vstack((np.zeros(d_w2v),np.ones((voc_size-1,d_w2v))))
-		T_mask = tf.constant(np_mask, tf.float32, name='LUT_mask')
-
-		LUT = np.zeros((voc_size, d_w2v), dtype='float32')
-		for v in range(voc_size):
-			LUT[v] = rng.randn(d_w2v)
-			LUT[v] = LUT[v] / (np.linalg.norm(LUT[v]) + 1e-6)
-
-		# word 0 is blanked out, word 1 is 'UNK'
-		LUT[0] = np.zeros((d_w2v))
-		# setup LUT!
-		T_w2v = tf.Variable(LUT.astype('float32'),trainable=True)
-
-		return T_w2v, T_mask 
-	def encoder(self):
-		
-		timesteps = self.enc_in_shape[1]
-		embedded_feature = self.input_feature
-		
-		assignment = tf.reshape(embedded_feature,[-1,self.enc_in_shape[2],self.enc_in_shape[3],self.enc_in_shape[4]])
-		assignment = tf.add(tf.nn.conv2d(assignment, self.W_e, self.stride, self.pad, name='w_conv_x'),tf.reshape(self.b_e,[1, 1, 1, self.centers_num]))
-		
-		assignment = tf.reshape(assignment,[-1,self.enc_in_shape[1],self.enc_in_shape[2],self.enc_in_shape[3],self.centers_num])
-
-		axis = [1,0]+list(range(2,5))  # axis = [1,0,2]
-		assignment = tf.transpose(assignment, perm=axis)
-
-		input_assignment = tf.TensorArray(
-	            dtype=embedded_feature.dtype,
-	            size=timesteps,
-	            tensor_array_name='input_assignment')
-		if hasattr(input_assignment, 'unstack'):
-			input_assignment = input_assignment.unstack(assignment)
-		else:
-			input_assignment = input_assignment.unpack(assignment)	
-
-		hidden_states = tf.TensorArray(
-	            dtype=tf.float32,
-	            size=timesteps,
-	            tensor_array_name='hidden_states')
-
-		def get_init_state(x, output_dims):
-			initial_state = tf.ones_like(x)
-			initial_state = tf.reduce_mean(initial_state,axis=[1,4])
-			initial_state = tf.expand_dims(initial_state,dim=-1)
-			initial_state = tf.tile(initial_state,[1,1,1,output_dims])*(1./self.centers_num)
-			return initial_state
-		def step(time, hidden_states, h_tm1):
-			assign_t = input_assignment.read(time) # batch_size * dim
-			
-			r = hard_sigmoid(assign_t+ tf.nn.conv2d(h_tm1, self.U_e_r, self.stride, self.pad, name='uh_r'))
-			z = hard_sigmoid(assign_t+ tf.nn.conv2d(h_tm1, self.U_e_z, self.stride, self.pad, name='uh_z'))
-			if self.activation=='tanh':
-				hh = tf.tanh(assign_t+ tf.nn.conv2d(r*h_tm1, self.U_e_h, self.stride, self.pad, name='uh_hh'))
-			elif self.activation=='softmax':
-				hh = tf.nn.softmax(assign_t+ tf.nn.conv2d(r*h_tm1, self.U_e_h, self.stride, self.pad, name='uh_hh'),dim=-1)
-			h = (1-z)*hh + z*h_tm1
-			
-			hidden_states = hidden_states.write(time, h)
-
-			return (time+1,hidden_states, h)
-
-		time = tf.constant(0, dtype='int32', name='time')
-		initial_state = get_init_state(embedded_feature,self.centers_num)
-
-		feature_out = tf.while_loop(
-	            cond=lambda time, *_: time < timesteps,
-	            body=step,
-	            loop_vars=(time, hidden_states, initial_state ),
-	            parallel_iterations=32,
-	            swap_memory=True)
-
-
-		hidden_states = feature_out[-2]
-		if hasattr(hidden_states, 'stack'):
-			assignment = hidden_states.stack()
-		else:
-			assignment = hidden_states.pack()
-
-		
-		
-		axis = [1,0]+list(range(2,5))  # axis = [1,0,2]
-		assignment = tf.transpose(assignment, perm=axis)
-
-
-		assignment = tf.reshape(assignment,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.centers_num])
-		# assignment = tf.nn.softmax(assignment,dim=-1)
-
-		# for alpha * c
-		a_sum = tf.reduce_sum(assignment,-2,keep_dims=True)
-		a = tf.multiply(a_sum,self.centers)
-
-		# for alpha * x
-		assignment = tf.transpose(assignment,perm=[0,2,1])
-
-		embedded_feature = tf.reshape(embedded_feature,[-1,self.enc_in_shape[2]*self.enc_in_shape[3],self.enc_in_shape[4]])
-
-		vlad = tf.matmul(assignment,embedded_feature)
-		vlad = tf.transpose(vlad, perm=[0,2,1])
-
-		# for differnce
-		vlad = tf.subtract(vlad,a)
-
-		vlad = tf.reshape(vlad,[-1,self.enc_in_shape[-1],self.centers_num])
-		vlad = tf.nn.l2_normalize(vlad,1)
-
-		vlad = tf.reshape(vlad,[-1,self.enc_in_shape[1],self.enc_in_shape[-1]*self.centers_num])
-		vlad = tf.nn.l2_normalize(vlad,2)
-		last_output = tf.nn.xw_plus_b(tf.reduce_mean(self.input_feature,axis=[1,2,3]),self.liner_W, self.liner_b)
-
-		return last_output, vlad
-
-

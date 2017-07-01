@@ -35,6 +35,9 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
 			interval = np.random.randint(1,5)
 			data_v = data_v[:,0::interval][:,0:10]
+			# data_v = data_v[:,0::interval]
+			# start = np.random.randint(0,data_v.shape[1]-10+1)
+			# data_v = data_v[:,start:start+10]
 		else:
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		if bidirectional:
@@ -148,7 +151,7 @@ def main(hf,f_type,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.SeqVladWithReductionAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+	attentionCaptionModel = SeqVladModel.SeqVladWithReduAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
 								reduction_dim=reduction_dim,
 								activation=activation,
 								centers_num=centers_num, 
@@ -248,6 +251,9 @@ def main(hf,f_type,
 def parseArguments():
 	parser = argparse.ArgumentParser(description='seqvlad, youtube, video captioning, reduction app')
 	
+	parser.add_argument('--feature', type=str, default='google'
+							help='google or resnet')
+
 	parser.add_argument('--step', action='store_true',
 							help='step training')
 	parser.add_argument('--bidirectional', action='store_true',
@@ -269,6 +275,8 @@ def parseArguments():
 	parser.add_argument('--reduction_dim', type=int, default=512,
 							help='the reduction dim of input feature, e.g., 1024->512')
 
+	
+
 	args = parser.parse_args()
 	return args
 
@@ -288,6 +296,8 @@ if __name__ == '__main__':
 	bidirectional = args.bidirectional
 	step = args.step
 
+	feature = args.feature
+
 	kernel_size = 3
 	
 	capl = 16
@@ -295,14 +305,28 @@ if __name__ == '__main__':
 	'''
 	---------------------------------
 	'''
-	video_feature_dims = 1024
-	timesteps_v = 10 # sequences length for video
-	height = 7
-	width = 7
-	feature_shape = (timesteps_v,video_feature_dims,height,width)
-	f_type = str(activation)+'_seqvlad_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
-	
-
+	if feature=='google':
+		video_feature_dims = 1024
+		timesteps_v = 10 # sequences length for video
+		height = 7
+		width = 7
+		feature_shape = (timesteps_v,video_feature_dims,height,width)
+		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+		feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
+	'''
+	---------------------------------
+	'''
+	if feature=='resnet':
+		video_feature_dims = 2048
+		timesteps_v = 10 # sequences length for video
+		height = 7
+		width = 7
+		feature_shape = (timesteps_v,video_feature_dims,height,width)
+		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+		feature_path = '/data/xyj/youtube-res5c-'+str(timesteps_v)+'fpv.h5'
+	'''
+	---------------------------------
+	'''
 	if step:
 		timesteps_v = 40
 		f_type = 'step_'+ f_type
@@ -312,10 +336,8 @@ if __name__ == '__main__':
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
 
-	feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
-	'''
-	---------------------------------
-	'''
+	
+	
 	hf = h5py.File(feature_path,'r')
 
 	# pretrained_model = '/home/xyj/usr/local/saved_model/youtube/seqvlad_withinit_attention_google_dw2v512_outputdim512_k1_c16/lr0.0001_f10_B64/model/E8_L1.93834684881.ckpt'

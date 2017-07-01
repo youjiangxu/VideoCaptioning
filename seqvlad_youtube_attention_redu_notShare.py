@@ -35,9 +35,7 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
 			interval = np.random.randint(1,5)
 			data_v = data_v[:,0::interval][:,0:10]
-			# data_v = data_v[:,0::interval]
-			# start = np.random.randint(0,data_v.shape[1]-10+1)
-			# data_v = data_v[:,start:start+10]
+			
 		else:
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		if bidirectional:
@@ -151,7 +149,7 @@ def main(hf,f_type,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.NetVladAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+	attentionCaptionModel = SeqVladModel.SeqVladWithReduNotShareAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
 								reduction_dim=reduction_dim,
 								activation=activation,
 								centers_num=centers_num, 
@@ -272,8 +270,6 @@ def parseArguments():
 	parser.add_argument('--reduction_dim', type=int, default=512,
 							help='the reduction dim of input feature, e.g., 1024->512')
 
-	
-
 	args = parser.parse_args()
 	return args
 
@@ -305,7 +301,7 @@ if __name__ == '__main__':
 	height = 7
 	width = 7
 	feature_shape = (timesteps_v,video_feature_dims,height,width)
-	f_type = str(activation)+'_netvlad_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+	f_type = 'notShare_'+str(activation)+'_seqvlad_attention_google_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
 	
 
 	if step:
