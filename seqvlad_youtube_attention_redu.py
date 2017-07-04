@@ -251,7 +251,7 @@ def main(hf,f_type,
 def parseArguments():
 	parser = argparse.ArgumentParser(description='seqvlad, youtube, video captioning, reduction app')
 	
-	parser.add_argument('--feature', type=str, default='google'
+	parser.add_argument('--feature', type=str, default='google',
 							help='google or resnet')
 
 	parser.add_argument('--step', action='store_true',
@@ -311,7 +311,9 @@ if __name__ == '__main__':
 		height = 7
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
-		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+		f_type = str(activation)+'_back_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+		if step:
+			timesteps_v = 40
 		feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
 	'''
 	---------------------------------
@@ -323,6 +325,8 @@ if __name__ == '__main__':
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
 		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+		if step:
+			timesteps_v = 40
 		feature_path = '/data/xyj/youtube-res5c-'+str(timesteps_v)+'fpv.h5'
 	'''
 	---------------------------------
