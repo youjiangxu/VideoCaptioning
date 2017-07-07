@@ -32,7 +32,7 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 		tic = time.time()
 		
 		if step:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,feature_shape[1],7,7))
 			interval = np.random.randint(1,5)
 			data_v = data_v[:,0::interval][:,0:10]
 			# data_v = data_v[:,0::interval]
@@ -69,7 +69,7 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		if step:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,feature_shape[1],7,7))
 			data_v = data_v[:,0::4]
 		else:
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
@@ -98,7 +98,7 @@ def beamsearch_exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
 		if step:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,1024,7,7))
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,feature_shape[1],7,7))
 			data_v = data_v[:,0::4]
 		else:
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
@@ -311,7 +311,7 @@ if __name__ == '__main__':
 		height = 7
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
-		f_type = str(activation)+'_back_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
+		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
 		if step:
 			timesteps_v = 40
 		feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
@@ -327,12 +327,12 @@ if __name__ == '__main__':
 		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)
 		if step:
 			timesteps_v = 40
-		feature_path = '/data/xyj/youtube-res5c-'+str(timesteps_v)+'fpv.h5'
+		feature_path = '/data/xyj/ResNet200-res5c-relu-f'+str(timesteps_v)+'.h5'
 	'''
 	---------------------------------
 	'''
 	if step:
-		timesteps_v = 40
+		
 		f_type = 'step_'+ f_type
 	
 	if bidirectional:
