@@ -186,12 +186,12 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_beamsearch_attention_resnet152/lr0.0001_f40_B64/model/E2_L2.38025195606.ckpt'
+	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_beamsearch_attention_resnet152/lr0.0001_f40_B64/model/E2_L2.38025195606.ckpt'
 	
 	main(hf,f_type,capl=20, d_w2v=512, output_dim=512,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=40,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 
 	

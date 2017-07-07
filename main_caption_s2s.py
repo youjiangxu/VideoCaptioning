@@ -3,7 +3,7 @@ import os
 import h5py
 import math
 
-from utils import CaptionDataUtil
+from utils import DataUtil
 from model import CaptionModel 
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -28,8 +28,8 @@ def exe_train(sess, data, batch_size, v2i, hf, feature_shape,
 		# if batch_idx < 100:
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 
-		data_v = CaptionDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-		data_c, data_y = CaptionDataUtil.getNewBatchTrainCaption(batch_caption, v2i, capl=capl)
+		data_v = DataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		data_c, data_y = DataUtil.getNewBatchTrainCaption(batch_caption, v2i, capl=capl)
 
 		_, l = sess.run([train,loss],feed_dict={input_video:data_v, input_captions:data_c,  y:data_y})
 		total_loss += l
@@ -47,11 +47,11 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
-		data_v = CaptionDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
-		data_c, data_y = CaptionDataUtil.getBatchTestCaption(batch_caption, v2i, capl=capl)
+		data_v = DataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		data_c, data_y = DataUtil.getBatchTestCaption(batch_caption, v2i, capl=capl)
 		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
-		generated_captions = CaptionDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
+		generated_captions = DataUtil.convertCaptionI2V(batch_caption, gw, i2v)
 
 		for idx, sen in enumerate(generated_captions):
 			print('%s : %s' %(batch_caption[idx].keys()[0],sen))
@@ -80,7 +80,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	'''
 
 	# Create vocabulary
-	v2i, train_data, val_data, test_data = CaptionDataUtil.create_vocabulary_word2vec(file, capl=capl, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	v2i, train_data, val_data, test_data = DataUtil.create_vocabulary_word2vec(file, capl=capl, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
 
 	i2v = {i:v for v,i in v2i.items()}
 
@@ -91,13 +91,18 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl,len(v2i)))
 
-	captionModel = CaptionModel.CaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim)
+	captionModel = CaptionModel.AttentionCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim)
 	predict_score, predict_words = captionModel.build_model()
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=predict_score)
 	loss = tf.reduce_mean(loss)+sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
-	optimizer = tf.train.RMSPropOptimizer(lr,decay=0.9, momentum=0.0, epsilon=1e-8)
-	train = optimizer.minimize(loss)
+	# optimizer = tf.train.RMSPropOptimizer(lr,decay=0.9, momentum=0.0, epsilon=1e-8)
+	# train = optimizer.minimize(loss)
+	optimizer = tf.train.AdamOptimizer(learning_rate=lr,beta1=0.9,beta2=0.999,epsilon=1e-08,use_locking=False,name='Adam')
+	
 
+	gvs = optimizer.compute_gradients(loss)
+	capped_gvs = [(tf.clip_by_global_norm([grad], 10)[0][0], var) for grad, var in gvs ]
+	train = optimizer.apply_gradients(capped_gvs)
 	'''
 		configure && runtime environment
 	'''
@@ -154,30 +159,42 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 if __name__ == '__main__':
 
 
-	lr = 0.0002
+	lr = 0.0001
 
-
-	
-	video_feature_dims=1024
+	video_feature_dims=2048
 	timesteps_v=40 # sequences length for video
 	# hight = 7
 	# width = 7
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'GoogleNet'
-	# feature_path = '/home/xyj/usr/local/data/in5b-'+str(timesteps_v)+'fpv.h5'
-	feature_path = '/home/xyj/usr/local/data/YouTube/feature/pool5_7x7_s1-'+str(timesteps_v)+'f.h5'
+	# f_type = 'ResNet'
+	# # feature_path = '/home/xyj/usr/local/data/in5b-'+str(timesteps_v)+'fpv.h5'
+	# feature_path = '/data/xyj/youtube-resnet-pool5-'+str(timesteps_v)+'fpv.h5'
+	f_type = 'ResNet-pool5'
+	feature_path = '/data/xyj/ResNet152-pool5-f'+str(timesteps_v)+'.h5'
+
+	
+	# video_feature_dims=1024
+	# timesteps_v=10 # sequences length for video
+	# # hight = 7
+	# # width = 7
+	# feature_shape = (timesteps_v,video_feature_dims)
+
+	# f_type = 'GoogleNet'
+	# # feature_path = '/home/xyj/usr/local/data/in5b-'+str(timesteps_v)+'fpv.h5'
+	# feature_path = '/home/lyb/XYJ/YouTube2Text/feature/pool5_7x7_s1-'+str(timesteps_v)+'f.h5'
 
 	'''
 	---------------------------------
 	'''
 	hf = h5py.File(feature_path,'r')
+	# print(hf.keys())
 
 	pretrained_model = None
 	
 	main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 		feature_shape=feature_shape,lr=lr,
-		batch_size=64,total_epoch=100,
+		batch_size=64,total_epoch=30,
 		file='./data',pretrained_model=None)
 	
 

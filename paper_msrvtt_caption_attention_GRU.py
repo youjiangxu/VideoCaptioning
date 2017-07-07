@@ -4,7 +4,7 @@ import h5py
 import math
 
 from utils import MsrDataUtil
-from model import mGRUCaptionModel 
+from model import CaptionModel 
 
 os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
@@ -93,7 +93,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = mGRUCaptionModel.mGRUAttentionBeamsearchCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8], 
+	attentionCaptionModel = CaptionModel.GRUAttentionBeamsearchCaptionModel(input_video, input_captions, voc_size, d_w2v, output_dim, T_k=[1,2,4,8], 
 		max_len = 16, beamsearch_batchsize = 1, beam_size=5)
 
 
@@ -189,7 +189,7 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'beamsearch_mgru_attention_resnet200_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'beamsearch_gru_attention_resnet200_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
 	feature_path = '/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
