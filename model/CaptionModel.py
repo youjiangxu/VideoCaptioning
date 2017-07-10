@@ -1287,7 +1287,7 @@ class GRUAttentionBeamsearchCaptionModel(object):
 		caption model for ablation studying
 	'''
 	def __init__(self, input_feature, input_captions, voc_size, d_w2v, output_dim, done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5, 
-		T_k=[1,3,6], attention_dim = 100, dropout=0.5,
+		attention_dim = 100, dropout=0.5,
 		inner_activation='hard_sigmoid',activation='tanh',
 		return_sequences=True):
 		self.input_feature = input_feature
@@ -1297,7 +1297,6 @@ class GRUAttentionBeamsearchCaptionModel(object):
 		self.d_w2v = d_w2v
 		self.output_dim = output_dim
 
-		self.T_k = T_k
 		self.dropout = dropout
 
 		self.beam_size = beam_size
@@ -1372,9 +1371,6 @@ class GRUAttentionBeamsearchCaptionModel(object):
 
 
 
-		# multirate
-		self.block_length = int(math.ceil(self.output_dim/len(self.T_k)))
-		print('block_length:%d'%self.block_length)
 
 
 		# classification parameters
@@ -1440,13 +1436,7 @@ class GRUAttentionBeamsearchCaptionModel(object):
 	            size=timesteps,
 	            tensor_array_name='hidden_states')
 
-		self.array_clock = []
 		
-		for idx, T_i in enumerate(self.T_k):
-			self.array_clock.append(tf.ones_like(initial_state[:,idx*self.block_length:min((idx+1)*self.block_length,self.output_dim)],
-				dtype=tf.int32)*T_i
-				)
-		self.array_clock = tf.concat(self.array_clock,axis=-1)	
 
 		def feature_step(time, hidden_states, h_tm1):
 			x_t = input_feature.read(time) # batch_size * dim
@@ -1461,18 +1451,9 @@ class GRUAttentionBeamsearchCaptionModel(object):
 
 			
 			# h = (1-z)*hh + z*h_tm1
-			h_t = (1-z)*hh + z*h_tm1
+			h = (1-z)*hh + z*h_tm1
 
-			h = tf.where(tf.equal(tf.mod(time,self.array_clock),0),
-				h_t,
-				h_tm1)
-			# h = []
-			# for idx, T_i in enumerate(self.T_k):
-			# 	if time % T_i == 0:
-			# 		h.append(h_t[:,idx*self.block_length:min((idx+1)*self.block_length,self.output_dim)])
-			# 	else:
-			# 		h.append(h_tm1[:,idx*self.block_length:min((idx+1)*self.block_length,self.output_dim)])
-			# h = tf.concat(h,axis=-1)
+			
 
 			hidden_states = hidden_states.write(time, h)
 

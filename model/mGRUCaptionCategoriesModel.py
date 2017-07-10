@@ -973,25 +973,31 @@ class mGRUCategoriesAttentionBeamsearchCaptionModel(object):
 			logprobs = tf.reshape(logprobs, [1, self.beam_size, self.voc_size])
 
 
-			logprobs, indices = tf.nn.top_k(logprobs, self.beam_size, sorted=False)  # logprobs-->  [batch_size==1 , beam_size , beam_size]
-			
-			
-			logprobs = logprobs+tf.expand_dims(past_logprobs, 2)
+			# logprobs, indices = tf.nn.top_k(logprobs, self.beam_size, sorted=False)  # logprobs-->  [batch_size==1 , beam_size , beam_size]
+			# logprobs = logprobs+tf.expand_dims(past_logprobs, 2)
+			# past_logprobs, topk_indices = tf.nn.top_k(
+			#     tf.reshape(logprobs, [1, self.beam_size * self.beam_size]),
+			#     self.beam_size, 
+			#     sorted=False
+			# )       
+			# indices = tf.gather(tf.reshape(indices,[-1,1]),tf.reshape(topk_indices,[-1]))
+			# # For continuing to the next symbols
+			# symbols = indices % self.voc_size
+			# symbols = tf.reshape(symbols, [1,self.beam_size])
 
 			
+			logprobs = logprobs+tf.expand_dims(past_logprobs, 2)
 			past_logprobs, topk_indices = tf.nn.top_k(
-			    tf.reshape(logprobs, [1, self.beam_size * self.beam_size]),
+			    tf.reshape(logprobs, [1, self.beam_size * self.voc_size]),
 			    self.beam_size, 
 			    sorted=False
 			)       
-			indices = tf.gather(tf.reshape(indices,[-1,1]),tf.reshape(topk_indices,[-1]))
 
-			# For continuing to the next symbols
-			symbols = indices % self.voc_size
+			symbols = topk_indices % self.voc_size
 			symbols = tf.reshape(symbols, [1,self.beam_size])
+			parent_refs = topk_indices // self.voc_size
 
 
-			parent_refs = topk_indices // self.beam_size
 			h = tf.gather(h,  tf.reshape(parent_refs,[-1]))
 			
 			past_symbols_batch_major = tf.reshape(past_symbols[:,:,0:time], [-1, time])
@@ -1014,7 +1020,11 @@ class mGRUCategoriesAttentionBeamsearchCaptionModel(object):
 			
 			done_past_symbols = tf.gather(tf.reshape(past_symbols,[self.beam_size,self.max_len]),done_indice_max)
 			
-			cond2 = tf.greater(logprobs_done_max,logprobs_finished_beams)
+			logprobs_done_max = tf.div(-logprobs_done_max,tf.cast(time,tf.float32))
+			cond2 = tf.greater(logprobs_finished_beams,logprobs_done_max)
+
+			# cond2 = tf.greater(logprobs_done_max,logprobs_finished_beams)
+			
 			cond3 = tf.equal(done_past_symbols[:,time],self.done_token)
 			cond4 = tf.equal(time,self.max_len-1)
 
@@ -1037,7 +1047,7 @@ class mGRUCategoriesAttentionBeamsearchCaptionModel(object):
 		# past_symbols = tf.zeros((self.batch_size, self.beam_size, self.max_len), dtype=tf.int32)
 
 		finished_beams = tf.zeros((self.batch_size, self.max_len), dtype=tf.int32)
-		logprobs_finished_beams = tf.ones((self.batch_size,), dtype=tf.float32) * -float('inf')
+		logprobs_finished_beams = tf.ones((self.batch_size,), dtype=tf.float32) * float('inf')
 
 		x_0 = captions[:,0]
 		x_0 = tf.expand_dims(x_0,dim=-1)
@@ -1051,6 +1061,7 @@ class mGRUCategoriesAttentionBeamsearchCaptionModel(object):
 		time = tf.constant(1, dtype='int32', name='time')
 		timesteps = self.max_len
 
+		
 		
 
 		test_out = tf.while_loop(
@@ -1783,6 +1794,45 @@ class mGRUBeamsearchFinalModel(mGRUCategoriesAttentionBeamsearchCaptionModel):
 		self.input_categories_feature = tf.gather(self.cate_matrix,tf.tile(input_categories,[1,input_feature1.get_shape().as_list()[1]]))
 
 		self.input_feature = tf.concat([input_feature1,input_feature2,self.input_categories_feature],-1)
+		print('input_feature.shape(),', self.input_feature.get_shape().as_list())
+		self.input_captions = input_captions
+
+		self.voc_size = voc_size
+		self.d_w2v = d_w2v
+		self.output_dim = output_dim
+
+		self.T_k = T_k
+		self.dropout = dropout
+
+		self.beam_size = beam_size
+
+		assert(beamsearch_batchsize==1)
+		self.batch_size = beamsearch_batchsize
+		self.done_token = done_token
+		self.max_len = max_len
+
+
+		self.inner_activation = inner_activation
+		self.activation = activation
+		self.return_sequences = return_sequences
+		self.attention_dim = attention_dim
+
+		self.encoder_input_shape = self.input_feature.get_shape().as_list()
+		self.decoder_input_shape = self.input_captions.get_shape().as_list()
+
+
+class mGRUBeamsearchFinalResC3DModel(mGRUCategoriesAttentionBeamsearchCaptionModel):
+	'''
+		caption model for ablation studying
+	'''
+	def __init__(self, input_feature1, input_feature2, input_captions, voc_size, d_w2v, output_dim, 
+		done_token=3, max_len = 20, beamsearch_batchsize = 1, beam_size=5, 
+		T_k=[1,3,6], attention_dim = 100, dropout=0.5,
+		inner_activation='hard_sigmoid',activation='tanh',
+		return_sequences=True):
+
+
+		self.input_feature = tf.concat([input_feature1,input_feature2],-1)
 		print('input_feature.shape(),', self.input_feature.get_shape().as_list())
 		self.input_captions = input_captions
 

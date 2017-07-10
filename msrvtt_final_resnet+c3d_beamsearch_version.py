@@ -16,8 +16,8 @@ import json
 
 
 		
-def exe_train(sess, data, cate_info, batch_size, v2i,  hf1, hf2, feature_shape1, feature_shape2, 
-	train, loss, input_video1, input_video2, input_captions, input_categories, y, capl=16):
+def exe_train(sess, data, batch_size, v2i,  hf1, hf2, feature_shape1, feature_shape2, 
+	train, loss, input_video1, input_video2, input_captions, y, capl=16):
 
 	np.random.shuffle(data)
 
@@ -35,15 +35,14 @@ def exe_train(sess, data, cate_info, batch_size, v2i,  hf1, hf2, feature_shape1,
 		data_v2 = MsrDataUtil.getBatchC3DVideoFeature(batch_caption,hf2,feature_shape2)
 
 		data_c, data_y = MsrDataUtil.getBatchTrainCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
-		data_cate = MsrDataUtil.getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape1)
 
-		_, l = sess.run([train,loss],feed_dict={input_video1:data_v1, input_video2:data_v2,  input_captions:data_c, input_categories:data_cate, y:data_y})
+		_, l = sess.run([train,loss],feed_dict={input_video1:data_v1, input_video2:data_v2,  input_captions:data_c, y:data_y})
 		total_loss += l
 		print('    batch_idx:%d/%d, loss:%.5f' %(batch_idx+1,num_batch,l))
 	total_loss = total_loss/num_batch
 	return total_loss
 
-def exe_test(sess, data, cate_info, batch_size, v2i, i2v,  hf1, hf2, feature_shape1, feature_shape2, 
+def exe_test(sess, data, batch_size, v2i, i2v,  hf1, hf2, feature_shape1, feature_shape2, 
 	predict_words, input_video1, input_video2, input_captions, input_categories, y, capl=16):
 	
 	caption_output = []
@@ -57,9 +56,8 @@ def exe_test(sess, data, cate_info, batch_size, v2i, i2v,  hf1, hf2, feature_sha
 		data_v2 = MsrDataUtil.getBatchC3DVideoFeature(batch_caption,hf2,feature_shape2)
 		
 		data_c, data_y = MsrDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
-		data_cate = MsrDataUtil.getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape1)
 		
-		[gw] = sess.run([predict_words],feed_dict={input_video1:data_v1, input_video2:data_v2, input_captions:data_c, input_categories:data_cate, y:data_y})
+		[gw] = sess.run([predict_words],feed_dict={input_video1:data_v1, input_video2:data_v2, input_captions:data_c, y:data_y})
 
 		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
 
@@ -127,7 +125,6 @@ def main(hf1,hf2,f_type,
 										word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3}, num_training=9000)
 	else:
 		v2i, train_data, val_data, test_data = MsrDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
-	cate_info = MsrDataUtil.getCategoriesInfo(file)
 
 	i2v = {i:v for v,i in v2i.items()}
 
@@ -137,10 +134,9 @@ def main(hf1,hf2,f_type,
 	input_video1 = tf.placeholder(tf.float32, shape=(None,)+feature_shape1,name='input_video')
 	input_video2 = tf.placeholder(tf.float32, shape=(None,)+feature_shape2,name='input_video')
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
-	input_categories = tf.placeholder(tf.int32, shape=(None,1), name='input_categories')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = mGRUCaptionCategoriesModel.mGRUBeamsearchFinalModel(input_video1, input_video2, input_captions, input_categories, 
+	attentionCaptionModel = mGRUCaptionCategoriesModel.mGRUBeamsearchFinalResC3DModel(input_video1, input_video2, input_captions, 
 								voc_size, d_w2v, output_dim, 
 								T_k=[1,2,4,8], max_len = capl, beam_size=5)
 
@@ -185,19 +181,19 @@ def main(hf1,hf2,f_type,
 			print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
 			# # train phase
 			tic = time.time()
-			total_loss = exe_train(sess, train_data, cate_info, batch_size, v2i, hf1, hf2, feature_shape1, feature_shape2, 
-										train, loss, input_video1, input_video2, input_captions, input_categories, y, capl=capl)
+			total_loss = exe_train(sess, train_data, batch_size, v2i, hf1, hf2, feature_shape1, feature_shape2, 
+										train, loss, input_video1, input_video2, input_captions, y, capl=capl)
 
 			print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
 			# tic = time.time()
-			# js = exe_test(sess, test_data, cate_info, batch_size, v2i, i2v, hf1, hf2, feature_shape1, feature_shape2, 
+			# js = exe_test(sess, test_data, batch_size, v2i, i2v, hf1, hf2, feature_shape1, feature_shape2, 
 			# 							predict_words, input_video1, input_video2, input_captions, input_categories, y, capl=capl)
 			# print('    --Val--, .......Time:%.3f' %(time.time()-tic))
 
 			tic = time.time()
-			js = beamsearch_exe_test(sess, test_data, cate_info, 1, v2i, i2v, hf1, hf2, feature_shape1, feature_shape2, 
-										predict_words, input_video1, input_video2, input_captions, input_categories, y, 
+			js = beamsearch_exe_test(sess, test_data, 1, v2i, i2v, hf1, hf2, feature_shape1, feature_shape2, 
+										predict_words, input_video1, input_video2, input_captions, y, 
 										finished_beam, logprobs_finished_beams,
 										capl=capl)
 			print('    --beamsearch--, .......Time:%.3f' %(time.time()-tic))
@@ -212,7 +208,7 @@ def main(hf1,hf2,f_type,
 				print('mkdir %s' %export_path+'/res')
 
 			# eval
-			res_path = export_path+'/res/'+f_type+'_E'+str(epoch+1)+'.json'
+			res_path = export_path+'/res/E'+str(epoch+1)+'.json'
 			evaluate_mode_by_shell(res_path,js)
 
 
@@ -247,7 +243,7 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	# feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'categories+resnet200+c3dfc7_mgru1248_attention_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'resnet200+c3dfc7_mgru1248_attention_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
 	feature_path1 = '/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
 	feature_shape1 = (timesteps_v,2048)
 

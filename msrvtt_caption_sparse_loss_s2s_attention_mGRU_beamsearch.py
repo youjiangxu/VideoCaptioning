@@ -6,7 +6,8 @@ import math
 from utils import MsrDataUtil
 from model import mGRUCaptionModel 
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+from utils import MsrFinalDataUtil
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -73,7 +74,9 @@ def evaluate_mode_by_shell(res_path,js):
 	os.system(command)
 
 
-def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
+def main(hf,f_type,
+		final=False,
+		capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
 		batch_size=64,total_epoch=100,
 		file=None,pretrained_model=None):
@@ -82,7 +85,11 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	'''
 
 	# Create vocabulary
-	v2i, train_data, val_data, test_data = MsrDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	if final:
+		v2i, train_data, test_data = MsrFinalDataUtil.create_vocabulary_word2vec(file, capl=capl, 
+										word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3}, num_training=9000)
+	else:
+		v2i, train_data, val_data, test_data = MsrDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
 
 	i2v = {i:v for v,i in v2i.items()}
 
@@ -169,7 +176,7 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 
 if __name__ == '__main__':
 
-
+	final=True
 	lr = 0.0001
 
 	d_w2v = 512
@@ -189,7 +196,7 @@ if __name__ == '__main__':
 	timesteps_v=40 # sequences length for video
 	feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'beamsearch_mgru_attention_resnet200_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	f_type = 'beamsearch_new_mgru_attention_resnet200_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
 	feature_path = '/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
@@ -208,9 +215,13 @@ if __name__ == '__main__':
 	'''
 	hf = h5py.File(feature_path,'r')['images']
 
+	if final:
+		f_type = '9000_'+f_type
 	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_w1_sparse_mgru1248_attention_resnet152_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E7_L2.67342706254.ckpt'
 	
-	main(hf,f_type,capl=20, d_w2v=d_w2v, output_dim=output_dim,
+	main(hf,f_type,
+		final=final,
+		capl=20, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=128,total_epoch=30,
 		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)

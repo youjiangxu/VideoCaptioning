@@ -5,7 +5,7 @@ import math
 
 from utils import MsrDataUtil
 from model import mGRUCaptionCategoriesModel 
-
+from utils import MsrFinalDataUtil
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 import tensorflow as tf
@@ -103,7 +103,9 @@ def evaluate_mode_by_shell(res_path,js):
 	os.system(command)
 
 
-def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
+def main(hf,f_type,
+		final=False,
+		capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
 		batch_size=64,total_epoch=100,
 		file=None,pretrained_model=None):
@@ -112,7 +114,11 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 	'''
 
 	# Create vocabulary
-	v2i, train_data, val_data, test_data = MsrDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	if final:
+		v2i, train_data, test_data = MsrFinalDataUtil.create_vocabulary_word2vec(file, capl=capl, 
+										word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3}, num_training=9000)
+	else:
+		v2i, train_data, val_data, test_data = MsrDataUtil.create_vocabulary_word2vec(file, capl=capl, word_threshold=1, v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
 	cate_info = MsrDataUtil.getCategoriesInfo(file)
 
 	i2v = {i:v for v,i in v2i.items()}
@@ -166,12 +172,12 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 
 		for epoch in xrange(total_epoch):
 			# # shuffle
-			# print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
-			# # # train phase
-			# tic = time.time()
-			# total_loss = exe_train(sess, train_data, cate_info, batch_size, v2i, hf, feature_shape, train, loss, input_video, input_captions, input_categories, y, capl=capl)
+			print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
+			# # train phase
+			tic = time.time()
+			total_loss = exe_train(sess, train_data, cate_info, batch_size, v2i, hf, feature_shape, train, loss, input_video, input_captions, input_categories, y, capl=capl)
 
-			# print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
+			print('    --Train--, Loss: %.5f, .......Time:%.3f' %(total_loss,time.time()-tic))
 
 			# tic = time.time()
 			# js = exe_test(sess, test_data, cate_info, batch_size, v2i, i2v, hf, feature_shape, 
@@ -196,16 +202,17 @@ def main(hf,f_type,capl=16, d_w2v=512, output_dim=512,
 				print('mkdir %s' %export_path+'/res')
 
 			# eval
-			res_path = export_path+'/res/'+f_type+'_E'+str(epoch+1)+'.json'
+			res_path = export_path+'/res/E'+str(epoch+1)+'.json'
 			evaluate_mode_by_shell(res_path,js)
 
 
-			save_path = saver.save(sess, export_path+'/model/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
-			print("Model saved in file: %s" % save_path)
+			# save_path = saver.save(sess, export_path+'/model/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
+			# print("Model saved in file: %s" % save_path)
 		
 
 if __name__ == '__main__':
 
+	final=True
 
 	lr = 0.0001
 
@@ -215,22 +222,26 @@ if __name__ == '__main__':
 	capl=20
 	batch_size=128
 	total_epoch=40
-	# video_feature_dims=4096
-	# timesteps_v=40 # sequences length for video
-	# feature_shape = (timesteps_v,video_feature_dims)
+	'''
+	---------------------------------
+	'''
 
-	# f_type = 'mgru_attention_places205-alex-fc7_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
-	# feature_path = '/data/xyj/places205-alex-fc7-'+str(timesteps_v)+'f.h5'
+	video_feature_dims=4096
+	timesteps_v=40 # sequences length for video
+	feature_shape = (timesteps_v,video_feature_dims)
+
+	f_type = 'categories_mgru_attention_c3dfc7_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	feature_path = '/data/msrvtt/c3d_fc7_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
 	---------------------------------
 	'''
-	video_feature_dims=2048
-	timesteps_v=40 # sequences length for video
-	feature_shape = (timesteps_v,video_feature_dims)
+	# video_feature_dims=2048
+	# timesteps_v=40 # sequences length for video
+	# feature_shape = (timesteps_v,video_feature_dims)
 
-	f_type = 'categories_sparse_mgru1248_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
-	feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
+	# f_type = 'categories_mgru_attention_resnet152_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)
+	# feature_path = '/data/msrvtt/ResNet200_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/msrvtt/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	'''
 	---------------------------------
@@ -247,13 +258,16 @@ if __name__ == '__main__':
 	---------------------------------
 	'''
 	hf = h5py.File(feature_path,'r')['images']
-
-	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_categories_sparse_mgru1248_attention_resnet152_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E6_L2.7598314518.ckpt'
+	if final:
+		f_type = '9000_'+f_type
+	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt2017/s2s_categories_sparse_mgru1248_attention_resnet152_dw2v1024_outputdim1024/lr0.0001_f40_B128/model/E6_L2.7598314518.ckpt'
 	
-	main(hf,f_type,capl=capl, d_w2v=d_w2v, output_dim=output_dim,
+	main(hf,f_type,
+		final=final,
+		capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=batch_size,total_epoch=total_epoch,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
 	
 
 	

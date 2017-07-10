@@ -1344,37 +1344,33 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 
 		# encoder parameters
 		# print(self.encoder_input_shape)
-		encoder_i2h_shape = (self.encoder_input_shape[-1],self.output_dim)
+		encoder_i2h_shape = (self.encoder_input_shape[-1],3*self.output_dim)
 		encoder_h2h_shape = (self.output_dim,self.output_dim)
-		self.W_e_r = InitUtil.init_weight_variable(encoder_i2h_shape,init_method='glorot_uniform',name="W_e_r")
-		self.W_e_z = InitUtil.init_weight_variable(encoder_i2h_shape,init_method='glorot_uniform',name="W_e_z")
-		self.W_e_h = InitUtil.init_weight_variable(encoder_i2h_shape,init_method='glorot_uniform',name="W_e_h")
+		self.W_e = InitUtil.init_weight_variable(encoder_i2h_shape,init_method='glorot_uniform',name="W_e")
+		
 
 		self.U_e_r = InitUtil.init_weight_variable(encoder_h2h_shape,init_method='orthogonal',name="U_e_r")
 		self.U_e_z = InitUtil.init_weight_variable(encoder_h2h_shape,init_method='orthogonal',name="U_e_z")
 		self.U_e_h = InitUtil.init_weight_variable(encoder_h2h_shape,init_method='orthogonal',name="U_e_h")
 
-		self.b_e_r = InitUtil.init_bias_variable((self.output_dim,),name="b_e_r")
-		self.b_e_z = InitUtil.init_bias_variable((self.output_dim,),name="b_e_z")
-		self.b_e_h = InitUtil.init_bias_variable((self.output_dim,),name="b_e_h")
+		self.b_e = InitUtil.init_bias_variable((3*self.output_dim,),name="b_e")
+		
 
 
 		# decoder parameters
 		self.T_w2v, self.T_mask = self.init_embedding_matrix()
 
-		decoder_i2h_shape = (self.d_w2v,self.output_dim)
+		decoder_i2h_shape = (self.d_w2v,3*self.output_dim)
 		decoder_h2h_shape = (self.output_dim,self.output_dim)
-		self.W_d_r = InitUtil.init_weight_variable(decoder_i2h_shape,init_method='glorot_uniform',name="W_d_r")
-		self.W_d_z = InitUtil.init_weight_variable(decoder_i2h_shape,init_method='glorot_uniform',name="W_d_z")
-		self.W_d_h = InitUtil.init_weight_variable(decoder_i2h_shape,init_method='glorot_uniform',name="W_d_h")
+		self.W_d = InitUtil.init_weight_variable(decoder_i2h_shape,init_method='glorot_uniform',name="W_d")
+		
 
 		self.U_d_r = InitUtil.init_weight_variable(decoder_h2h_shape,init_method='orthogonal',name="U_d_r")
 		self.U_d_z = InitUtil.init_weight_variable(decoder_h2h_shape,init_method='orthogonal',name="U_d_z")
 		self.U_d_h = InitUtil.init_weight_variable(decoder_h2h_shape,init_method='orthogonal',name="U_d_h")
 
-		self.b_d_r = InitUtil.init_bias_variable((self.output_dim,),name="b_d_r")
-		self.b_d_z = InitUtil.init_bias_variable((self.output_dim,),name="b_d_z")
-		self.b_d_h = InitUtil.init_bias_variable((self.output_dim,),name="b_d_h")
+		self.b_d = InitUtil.init_bias_variable((3*self.output_dim,),name="b_d_r")
+		
 
 
 		
@@ -1384,12 +1380,9 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 
 		self.W = InitUtil.init_weight_variable((self.attention_dim,1),init_method='glorot_uniform',name="W")
 
-		self.A_z = InitUtil.init_weight_variable((self.encoder_input_shape[-1],self.output_dim),init_method='orthogonal',name="A_z")
+		self.A = InitUtil.init_weight_variable((self.encoder_input_shape[-1],3*self.output_dim),init_method='orthogonal',name="A")
 
-		self.A_r = InitUtil.init_weight_variable((self.encoder_input_shape[-1],self.output_dim),init_method='orthogonal',name="A_r")
-
-		self.A_h = InitUtil.init_weight_variable((self.encoder_input_shape[-1],self.output_dim),init_method='orthogonal',name="A_h")
-
+		
 
 
 		# multirate
@@ -1471,28 +1464,23 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 		def feature_step(time, hidden_states, h_tm1):
 			x_t = input_feature.read(time) # batch_size * dim
 
-			preprocess_x_r = tf.nn.xw_plus_b(x_t, self.W_e_r, self.b_e_r)
-			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_e_z, self.b_e_z)
-			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_e_h, self.b_e_h)
+			preprocess_x = tf.nn.xw_plus_b(x_t, self.W_e, self.b_e)
+
+			preprocess_x_r = preprocess_x[:,0:self.output_dim]
+			preprocess_x_z = preprocess_x[:,self.output_dim:2*self.output_dim]
+			preprocess_x_h = preprocess_x[:,2*self.output_dim::]
 
 			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_e_r))
 			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_e_z))
 			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_e_h))
 
-			
-			# h = (1-z)*hh + z*h_tm1
+
 			h_t = (1-z)*hh + z*h_tm1
 
 			h = tf.where(tf.equal(tf.mod(time,self.array_clock),0),
 				h_t,
 				h_tm1)
-			# h = []
-			# for idx, T_i in enumerate(self.T_k):
-			# 	if time % T_i == 0:
-			# 		h.append(h_t[:,idx*self.block_length:min((idx+1)*self.block_length,self.output_dim)])
-			# 	else:
-			# 		h.append(h_tm1[:,idx*self.block_length:min((idx+1)*self.block_length,self.output_dim)])
-			# h = tf.concat(h,axis=-1)
+
 
 			hidden_states = hidden_states.write(time, h)
 
@@ -1593,13 +1581,21 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 			attend_fea = self.input_feature * tf.tile(attend_e,[1,1,self.encoder_input_shape[-1]])
 			attend_fea = tf.reduce_sum(attend_fea,reduction_indices=1)
 
-			preprocess_x_r = tf.nn.xw_plus_b(x_t, self.W_d_r, self.b_d_r)
-			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_d_z, self.b_d_z)
-			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_d_h, self.b_d_h)
+			attend_fea = tf.matmul(attend_fea,self.A)
 
-			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + tf.matmul(attend_fea,self.A_r))
-			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + tf.matmul(attend_fea,self.A_z))
-			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h) + tf.matmul(attend_fea,self.A_h))
+			attend_fea_r = attend_fea[:,0:self.output_dim]
+			attend_fea_z = attend_fea[:,self.output_dim:2*self.output_dim]
+			attend_fea_h = attend_fea[:,2*self.output_dim::]
+
+			preprocess_x = tf.nn.xw_plus_b(x_t, self.W_d, self.b_d)
+
+			preprocess_x_r = preprocess_x[:,0:self.output_dim]
+			preprocess_x_z = preprocess_x[:,self.output_dim:2*self.output_dim]
+			preprocess_x_h = preprocess_x[:,2*self.output_dim::]
+
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + attend_fea_r)
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + attend_fea_z)
+			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h) + attend_fea_h)
 
 			
 			h = (1-z)*hh + z*h_tm1
@@ -1745,15 +1741,24 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 				tf.reshape(attend_e,[self.batch_size,self.beam_size,self.encoder_input_shape[-2],1]))
 			attend_fea = tf.reshape(tf.reduce_sum(attend_fea,reduction_indices=2),[self.batch_size*self.beam_size,self.encoder_input_shape[-1]])
 
-			preprocess_x_r = tf.nn.xw_plus_b(x_t, self.W_d_r, self.b_d_r)
-			preprocess_x_z = tf.nn.xw_plus_b(x_t, self.W_d_z, self.b_d_z)
-			preprocess_x_h = tf.nn.xw_plus_b(x_t, self.W_d_h, self.b_d_h)
+			attend_fea = tf.matmul(attend_fea,self.A)
 
-			r = tf.nn.sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + tf.matmul(attend_fea,self.A_r))
-			z = tf.nn.sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + tf.matmul(attend_fea,self.A_z))
-			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h) + tf.matmul(attend_fea,self.A_h))
+			attend_fea_r = attend_fea[:,0:self.output_dim]
+			attend_fea_z = attend_fea[:,self.output_dim:2*self.output_dim]
+			attend_fea_h = attend_fea[:,2*self.output_dim::]
+
+			preprocess_x = tf.nn.xw_plus_b(x_t, self.W_d, self.b_d)
+
+			preprocess_x_r = preprocess_x[:,0:self.output_dim]
+			preprocess_x_z = preprocess_x[:,self.output_dim:2*self.output_dim]
+			preprocess_x_h = preprocess_x[:,2*self.output_dim::]
+
+			r = hard_sigmoid(preprocess_x_r+ tf.matmul(h_tm1, self.U_d_r) + attend_fea_r)
+			z = hard_sigmoid(preprocess_x_z+ tf.matmul(h_tm1, self.U_d_z) + attend_fea_z)
+			hh = tf.nn.tanh(preprocess_x_h+ tf.matmul(r*h_tm1, self.U_d_h) + attend_fea_h)
 
 			
+
 			h = (1-z)*hh + z*h_tm1
 			return h
 		def take_step_zero(x_0, h_0):
@@ -1897,9 +1902,6 @@ class mGRUAttentionBeamsearchCaptionModel(object):
 	            swap_memory=True)
 
 		
-
-		
-
 
 		out_finished_beams = test_out[-2]
 		out_logprobs_finished_beams = test_out[-1]
