@@ -7,7 +7,7 @@ from utils import MsrDataUtil
 from model import mGRUCaptionCategoriesModel 
 from utils import MsrFinalDataUtil
 
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -70,8 +70,8 @@ def exe_test(sess, data, batch_size, v2i, i2v,  hf1, hf2, feature_shape1, featur
 
 	return js
 
-def beamsearch_exe_test(sess, data, cate_info, batch_size, v2i, i2v,  hf1, hf2, feature_shape1, feature_shape2, 
-	predict_words, input_video1, input_video2, input_captions, input_categories, y, finished_beam, logprobs_finished_beams, capl=16):
+def beamsearch_exe_test(sess, data, batch_size, v2i, i2v,  hf1, hf2, feature_shape1, feature_shape2, 
+	predict_words, input_video1, input_video2, input_captions, y, finished_beam, logprobs_finished_beams, capl=16):
 	
 	caption_output = []
 	total_data = len(data)
@@ -84,9 +84,8 @@ def beamsearch_exe_test(sess, data, cate_info, batch_size, v2i, i2v,  hf1, hf2, 
 		data_v2 = MsrDataUtil.getBatchC3DVideoFeature(batch_caption,hf2,feature_shape2)
 		
 		data_c, data_y = MsrDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
-		data_cate = MsrDataUtil.getBatchVideoCategoriesInfo(batch_caption, cate_info, feature_shape1)
 		
-		[tw, gw, gp] = sess.run([predict_words,finished_beam, logprobs_finished_beams],feed_dict={input_video1:data_v1, input_video2:data_v2, input_captions:data_c, input_categories:data_cate, y:data_y})
+		[tw, gw, gp] = sess.run([predict_words,finished_beam, logprobs_finished_beams],feed_dict={input_video1:data_v1, input_video2:data_v2, input_captions:data_c, y:data_y})
 
 		generated_captions = MsrDataUtil.convertCaptionI2V(batch_caption, gw, i2v)
 
@@ -177,7 +176,7 @@ def main(hf1,hf2,f_type,
 			print('restore pre trained file:' + pretrained_model)
 
 		for epoch in xrange(total_epoch):
-			# # shuffle
+			# shuffle
 			print('Epoch: %d/%d, Batch_size: %d' %(epoch+1,total_epoch,batch_size))
 			# # train phase
 			tic = time.time()
@@ -218,7 +217,7 @@ def main(hf1,hf2,f_type,
 
 if __name__ == '__main__':
 
-	final = True
+	final = False
 
 	lr = 0.0001
 
