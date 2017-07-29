@@ -1,0 +1,6 @@
+#!/bin/bash
+
+cd /home/xyj/usr/local/code/VideoCaptioning-mvad
+python seqvlad_mvad_redu.py --bidirectional --step --feature=google --d_w2v=512 --output_dim=512 --centers_num=64 --reduction_dim=512 --epoch=30 --gpu_id=0 --lr=0.0002 
+#python seqvlad_mvad_redu.py --bidirectional --feature=google --d_w2v=512 --output_dim=512 --centers_num=32 --reduction_dim=512 --epoch=30 
+#python seqvlad_mvad_redu.py --bidirectional --feature=google --d_w2v=512 --output_dim=512 --centers_num=64 --reduction_dim=512 --epoch=30 

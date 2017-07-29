@@ -6,9 +6,8 @@ import math
 from utils import SeqVladDataUtil
 from utils import DataUtil
 from model import SeqVladModel 
-from utils import CenterUtil
 
-# os.environ["CUDA_VISIBLE_DEVICES"]="1"
+# os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
 
 import tensorflow as tf
 import cPickle as pickle
@@ -32,12 +31,9 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 		tic = time.time()
 		
 		if step:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,feature_shape[1],7,7))
-			interval = np.random.randint(1,5)
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(20,feature_shape[1],7,7))
+			interval = np.random.randint(1,3)
 			data_v = data_v[:,0::interval][:,0:10]
-			# data_v = data_v[:,0::interval]
-			# start = np.random.randint(0,data_v.shape[1]-10+1)
-			# data_v = data_v[:,start:start+10]
 		else:
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		if bidirectional:
@@ -60,7 +56,7 @@ def exe_train(sess, data, epoch, batch_size, v2i, hf, feature_shape,
 	return total_loss
 
 def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape, 
-	predict_words, input_video, input_captions, y, step=False, capl=16):
+	predict_words, input_video, input_captions, y, capl=16):
 	
 	caption_output = []
 	total_data = len(data)
@@ -68,11 +64,8 @@ def exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 
 	for batch_idx in xrange(num_batch):
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
-		if step:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,feature_shape[1],7,7))
-			data_v = data_v[:,0::4]
-		else:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
+		
+		data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
 		[gw] = sess.run([predict_words],feed_dict={input_video:data_v, input_captions:data_c, y:data_y})
 
@@ -98,8 +91,8 @@ def beamsearch_exe_test(sess, data, batch_size, v2i, i2v, hf, feature_shape,
 		batch_caption = data[batch_idx*batch_size:min((batch_idx+1)*batch_size,total_data)]
 		
 		if step:
-			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(40,feature_shape[1],7,7))
-			data_v = data_v[:,0::4]
+			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,(20,feature_shape[1],7,7))
+			data_v = data_v[:,0::2]
 		else:
 			data_v = SeqVladDataUtil.getBatchVideoFeature(batch_caption,hf,feature_shape)
 		data_c, data_y = SeqVladDataUtil.getBatchTestCaptionWithSparseLabel(batch_caption, v2i, capl=capl)
@@ -120,13 +113,14 @@ def evaluate_mode_by_shell(res_path,js):
 	with open(res_path, 'w') as f:
 		json.dump(js, f)
 
-	command ='/home/xyj/usr/local/tools/caption/caption_eval/msrvtt_eval.sh '+ res_path
+	command ='/home/xyj/usr/local/tools/caption/caption_eval/mvad_eval.sh '+ res_path
 	os.system(command)
 
 
 def main(hf,f_type,
 		step=False,
 		bidirectional=False,
+		reduction_dim=512,
 		activation = 'tanh',
 		centers_num = 32, kernel_size=1, capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
@@ -137,7 +131,7 @@ def main(hf,f_type,
 	'''
 
 	# Create vocabulary
-	v2i, train_data, val_data, test_data = SeqVladDataUtil.create_vocabulary_word2vec(file, capl=capl,  v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
+	v2i, train_data, val_data, test_data = DataUtil.create_vocabulary_word2vec(file=file, capl=capl,  v2i={'': 0, 'UNK':1,'BOS':2, 'EOS':3})
 
 	i2v = {i:v for v,i in v2i.items()}
 
@@ -150,7 +144,8 @@ def main(hf,f_type,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.SeqVladAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+	attentionCaptionModel = SeqVladModel.SeqVladWithReduAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+								reduction_dim=reduction_dim,
 								activation=activation,
 								centers_num=centers_num, 
 								filter_size=kernel_size,
@@ -191,7 +186,7 @@ def main(hf,f_type,
 		tensorboard configure
 	'''
 	merged = tf.summary.merge_all()
-	export_path = '/home/xyj/usr/local/saved_model/msrvtt/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
+	export_path = '/home/xyj/usr/local/saved_model/mvad/'+f_type+'/'+'lr'+str(lr)+'_f'+str(feature_shape[0])+'_B'+str(batch_size)
 
 	if not os.path.exists(export_path+'/log'):
 		os.makedirs(export_path+'/log')
@@ -223,7 +218,9 @@ def main(hf,f_type,
 
 
 			# #do beamsearch
+			# if epoch%2==0:
 			tic = time.time()
+			print('beam searching ...')
 			js = beamsearch_exe_test(sess, test_data, 1, v2i, i2v, hf, feature_shape, 
 										predict_words, input_video, input_captions, y, finished_beam, logprobs_finished_beams, past_symbols, step=step, capl=capl)
 
@@ -243,19 +240,20 @@ def main(hf,f_type,
 			evaluate_mode_by_shell(res_path,js)
 
 
-			save_path = saver.save(sess, export_path+'/model/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
-			print("Model saved in file: %s" % save_path)
+			# save_path = saver.save(sess, export_path+'/model/'+'E'+str(epoch+1)+'_L'+str(total_loss)+'.ckpt')
+			# print("Model saved in file: %s" % save_path)
 		
 def parseArguments():
 	parser = argparse.ArgumentParser(description='seqvlad, youtube, video captioning, reduction app')
 	
-	parser.add_argument('--feature', type=str, default='google',
-							help='google or resnet')
+	parser.add_argument('--feature', type=str, default='vgg',
+							help='google or vgg')
+
+	parser.add_argument('--bidirectional', action='store_true',
+							help='bidirectional training')
 
 	parser.add_argument('--step', action='store_true',
 							help='step training')
-	parser.add_argument('--bidirectional', action='store_true',
-							help='bidirectional training')
 
 	parser.add_argument('--gpu_id', type=str, default="0",
 							help='specify gpu id')
@@ -270,6 +268,8 @@ def parseArguments():
 							help='the hidden size')
 	parser.add_argument('--centers_num', type=int, default=16,
 							help='the number of centers')
+	parser.add_argument('--reduction_dim', type=int, default=256,
+							help='the reduction dim of input feature, e.g., 1024->512')
 
 	
 
@@ -287,6 +287,7 @@ if __name__ == '__main__':
 	d_w2v = args.d_w2v
 	output_dim = args.output_dim
 
+	reduction_dim=args.reduction_dim
 	centers_num = args.centers_num
 	bidirectional = args.bidirectional
 	step = args.step
@@ -295,8 +296,21 @@ if __name__ == '__main__':
 
 	kernel_size = 3
 	
-	capl = 18
+	capl = 16
 	activation = 'tanh' ## can be one of 'tanh,softmax,relu,sigmoid'
+	'''
+	---------------------------------
+	'''
+	if feature=='vgg':
+		video_feature_dims = 512
+		timesteps_v = 10 # sequences length for video
+		height = 7
+		width = 7
+		feature_shape = (timesteps_v,video_feature_dims,height,width)
+		f_type = str(activation)+'_seqvlad_'+feature+'_dw2v'+str(d_w2v)+'_out'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)+'_w2'
+		# feature_path = '/home/xyj/usr/local/data/mvad/feature/mvad-vgg-pool5-'+str(timesteps_v)+'fpv.h5'
+		feature_path = '/data/mvad/mvad-vgg-pool5-'+str(timesteps_v)+'fpv.h5'
+
 	'''
 	---------------------------------
 	'''
@@ -306,10 +320,11 @@ if __name__ == '__main__':
 		height = 7
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
-		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+		f_type = str(activation)+'_seqvlad_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)+'_w2'
+		# feature_path = '/home/xyj/usr/local/data/mvad/feature/mvad-google-in5b-'+str(timesteps_v)+'fpv.h5'
 		if step:
-			timesteps_v = 40
-		feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
+			timesteps_v = 20
+		feature_path = '/data/mvad/mvad-google-in5b-'+str(timesteps_v)+'fpv.h5'
 	'''
 	---------------------------------
 	'''
@@ -319,36 +334,35 @@ if __name__ == '__main__':
 		height = 7
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
-		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
-		if step:
-			timesteps_v = 40
-		feature_path = '/data/msrvtt/ResNet200-res5c-relu-f'+str(timesteps_v)+'.h5'
+		f_type = str(activation)+'_seqvlad_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)+'_w2'
+		# feature_path = '/home/xyj/usr/local/data/mvad/feature/mvad-google-in5b-'+str(timesteps_v)+'fpv.h5'
+		
+		feature_path = '/data/mvad/mvad-res152-res5c-'+str(timesteps_v)+'fpv.h5'
 	'''
 	---------------------------------
 	'''
 	if step:
-		
 		f_type = 'step_'+ f_type
-	
 	if bidirectional:
 		f_type = 'bi_'+ f_type
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
 
 	
-	
+	f_type = 'new_'+f_type
 	hf = h5py.File(feature_path,'r')
 
-	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt/bi_step_tanh_seqvlad_attention_resnet_dw2v512_outputdim512_k3_c16_redu512/lr0.0001_f10_B64/model/E5_L2.87452633172.ckpt'
+	# pretrained_model = '/home/xyj/usr/local/saved_model/youtube/seqvlad_withinit_attention_google_dw2v512_outputdim512_k1_c16/lr0.0001_f10_B64/model/E8_L1.93834684881.ckpt'
 	
-	main(hf,f_type, 
-		step=step,
+	main(hf,f_type,
+		step=step, 
 		bidirectional=bidirectional,
+		reduction_dim=reduction_dim,
 		activation=activation,
 		centers_num=centers_num, kernel_size=kernel_size, capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=epoch,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
+		file='/home/xyj/usr/local/data/mvad/M-VAD/split',pretrained_model=None)
 	
 
 	

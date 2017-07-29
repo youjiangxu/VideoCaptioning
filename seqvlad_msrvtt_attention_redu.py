@@ -125,8 +125,10 @@ def evaluate_mode_by_shell(res_path,js):
 
 
 def main(hf,f_type,
+		keep_prob=0.5,
 		step=False,
 		bidirectional=False,
+		reduction_dim=512,
 		activation = 'tanh',
 		centers_num = 32, kernel_size=1, capl=16, d_w2v=512, output_dim=512,
 		feature_shape=None,lr=0.01,
@@ -150,7 +152,9 @@ def main(hf,f_type,
 	input_captions = tf.placeholder(tf.int32, shape=(None,capl), name='input_captions')
 	y = tf.placeholder(tf.int32,shape=(None, capl))
 
-	attentionCaptionModel = SeqVladModel.SeqVladAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+	attentionCaptionModel = SeqVladModel.SeqVladWithReduAttentionModel(input_video, input_captions, voc_size, d_w2v, output_dim,
+								dropout=keep_prob,
+								reduction_dim=reduction_dim,
 								activation=activation,
 								centers_num=centers_num, 
 								filter_size=kernel_size,
@@ -178,7 +182,7 @@ def main(hf,f_type,
 		configure && runtime environment
 	'''
 	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 0.5
+	config.gpu_options.per_process_gpu_memory_fraction = 0.6
 	# sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 	config.log_device_placement=False
 
@@ -270,8 +274,11 @@ def parseArguments():
 							help='the hidden size')
 	parser.add_argument('--centers_num', type=int, default=16,
 							help='the number of centers')
+	parser.add_argument('--reduction_dim', type=int, default=512,
+							help='the reduction dim of input feature, e.g., 1024->512')
 
-	
+	parser.add_argument('--keep_prob', type=float, default=0.5,
+							help='the probability of the elements to keep')
 
 	args = parser.parse_args()
 	return args
@@ -287,16 +294,20 @@ if __name__ == '__main__':
 	d_w2v = args.d_w2v
 	output_dim = args.output_dim
 
+	reduction_dim=args.reduction_dim
 	centers_num = args.centers_num
 	bidirectional = args.bidirectional
 	step = args.step
 
 	feature = args.feature
+	keep_prob = args.keep_prob
 
 	kernel_size = 3
 	
 	capl = 18
 	activation = 'tanh' ## can be one of 'tanh,softmax,relu,sigmoid'
+
+
 	'''
 	---------------------------------
 	'''
@@ -306,7 +317,7 @@ if __name__ == '__main__':
 		height = 7
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
-		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)+'_d'+str(keep_prob)
 		if step:
 			timesteps_v = 40
 		feature_path = '/data/xyj/in5b-'+str(timesteps_v)+'fpv.h5'
@@ -319,7 +330,7 @@ if __name__ == '__main__':
 		height = 7
 		width = 7
 		feature_shape = (timesteps_v,video_feature_dims,height,width)
-		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)
+		f_type = str(activation)+'_seqvlad_attention_'+feature+'_dw2v'+str(d_w2v)+'_outputdim'+str(output_dim)+'_k'+str(kernel_size)+'_c'+str(centers_num)+'_redu'+str(reduction_dim)+'_d'+str(keep_prob)
 		if step:
 			timesteps_v = 40
 		feature_path = '/data/msrvtt/ResNet200-res5c-relu-f'+str(timesteps_v)+'.h5'
@@ -339,16 +350,18 @@ if __name__ == '__main__':
 	
 	hf = h5py.File(feature_path,'r')
 
-	# pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt/bi_step_tanh_seqvlad_attention_resnet_dw2v512_outputdim512_k3_c16_redu512/lr0.0001_f10_B64/model/E5_L2.87452633172.ckpt'
+	pretrained_model = '/home/xyj/usr/local/saved_model/msrvtt/bi_step_tanh_seqvlad_attention_resnet_dw2v512_outputdim512_k3_c16_redu512_d0.2/lr0.0001_f10_B64/model/E3_L3.80775418881.ckpt'
 	
-	main(hf,f_type, 
+	main(hf,f_type,
+		keep_prob=keep_prob, 
 		step=step,
 		bidirectional=bidirectional,
+		reduction_dim=reduction_dim,
 		activation=activation,
 		centers_num=centers_num, kernel_size=kernel_size, capl=capl, d_w2v=d_w2v, output_dim=output_dim,
 		feature_shape=feature_shape,lr=lr,
 		batch_size=64,total_epoch=epoch,
-		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=None)
+		file='/home/xyj/usr/local/data/msrvtt',pretrained_model=pretrained_model)
 	
 
 	

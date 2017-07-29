@@ -337,6 +337,8 @@ if __name__ == '__main__':
 	
 	if bidirectional:
 		f_type = 'bi_'+ f_type
+
+	f_type = 'new_'+f_type
 	# feature_path = '/data/xyj/resnet152_pool5_f'+str(timesteps_v)+'.h5'
 	# feature_path = '/home/xyj/usr/local/data/youtube/in5b-'+str(timesteps_v)+'fpv.h5'
 
